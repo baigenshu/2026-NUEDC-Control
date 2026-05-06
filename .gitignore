@@ -1,0 +1,32 @@
+# Keil 输出文件
+*.o
+*.d
+*.crf
+*.htm
+*.lnp
+*.axf
+*.sct
+*.map
+*.lst
+*.dep
+*.bak
+*.backup
+
+# Keil 工程临时文件
+*.uvguix*
+*.uvoptx
+*.scvd
+
+# SysConfig 生成的文件（根据需要选择）
+# ti_msp_dl_config.c
+# ti_msp_dl_config.h
+
+# 编译输出目录
+Build/
+Output/
+Listings/
+Objects/
+
+# 其他
+*.log
+.DS_Store

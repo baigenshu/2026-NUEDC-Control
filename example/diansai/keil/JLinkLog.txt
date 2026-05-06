@@ -1,0 +1,20 @@
+TA290 001:782.295   SEGGER J-Link V6.98e Log File
+TA290 001:784.507   DLL Compiled: Mar 29 2021 14:18:39
+TA290 001:784.605   Logging started @ 2026-05-06 01:51
+TA290 001:784.699 - 1784.745ms
+TA290 001:784.943 JLINK_SetWarnOutHandler(...)
+TA290 001:785.167 - 0.269ms
+TA290 001:785.266 JLINK_OpenEx(...)
+TA290 001:787.579   
+  ***** Error: 
+TA290 001:787.684   Cannot connect to J-Link.
+TA290 001:813.329 - 28.103ms returns "Cannot connect to J-Link."
+TA290 001:814.249 
+  ***** 
+TA290 001:814.360 API Error: API JLINK_GetHardwareVersion function called before JLINKARM_Open()
+TA290 001:814.430 JLINK_GetHardwareVersion()
+TA290 001:844.425 - 30.057ms
+TA290 008:154.482 JLINK_Close()
+TA290 008:154.626 - 0.170ms
+TA290 008:156.063   
+TA290 008:156.090   Closed
