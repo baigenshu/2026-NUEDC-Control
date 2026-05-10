@@ -51,6 +51,7 @@ SYSCONFIG_WEAK void SYSCFG_DL_init(void)
     /* Module-Specific Initializations*/
     SYSCFG_DL_SYSCTL_init();
     SYSCFG_DL_I2C_MPU6050_init();
+    SYSCFG_DL_SYSTICK_init();
 }
 
 SYSCONFIG_WEAK void SYSCFG_DL_initPower(void)
@@ -59,9 +60,11 @@ SYSCONFIG_WEAK void SYSCFG_DL_initPower(void)
     DL_GPIO_reset(GPIOB);
     DL_I2C_reset(I2C_MPU6050_INST);
 
+
     DL_GPIO_enablePower(GPIOA);
     DL_GPIO_enablePower(GPIOB);
     DL_I2C_enablePower(I2C_MPU6050_INST);
+
     delay_cycles(POWER_STARTUP_DELAY);
 }
 
@@ -143,18 +146,34 @@ SYSCONFIG_WEAK void SYSCFG_DL_GPIO_init(void)
 }
 
 
+static const DL_SYSCTL_SYSPLLConfig gSYSPLLConfig = {
+    .inputFreq              = DL_SYSCTL_SYSPLL_INPUT_FREQ_16_32_MHZ,
+	.rDivClk2x              = 1,
+	.rDivClk1               = 0,
+	.rDivClk0               = 0,
+	.enableCLK2x            = DL_SYSCTL_SYSPLL_CLK2X_ENABLE,
+	.enableCLK1             = DL_SYSCTL_SYSPLL_CLK1_DISABLE,
+	.enableCLK0             = DL_SYSCTL_SYSPLL_CLK0_DISABLE,
+	.sysPLLMCLK             = DL_SYSCTL_SYSPLL_MCLK_CLK2X,
+	.sysPLLRef              = DL_SYSCTL_SYSPLL_REF_SYSOSC,
+	.qDiv                   = 4,
+	.pDiv                   = DL_SYSCTL_SYSPLL_PDIV_2
+};
 SYSCONFIG_WEAK void SYSCFG_DL_SYSCTL_init(void)
 {
 
 	//Low Power Mode is configured to be SLEEP0
     DL_SYSCTL_setBORThreshold(DL_SYSCTL_BOR_THRESHOLD_LEVEL_0);
+    DL_SYSCTL_setFlashWaitState(DL_SYSCTL_FLASH_WAIT_STATE_2);
 
-    DL_SYSCTL_setSYSOSCFreq(DL_SYSCTL_SYSOSC_FREQ_BASE);
-    /* Set default configuration */
-    DL_SYSCTL_disableHFXT();
-    DL_SYSCTL_disableSYSPLL();
-    DL_SYSCTL_setULPCLKDivider(DL_SYSCTL_ULPCLK_DIV_1);
-    DL_SYSCTL_setMCLKDivider(DL_SYSCTL_MCLK_DIVIDER_DISABLE);
+    
+	DL_SYSCTL_setSYSOSCFreq(DL_SYSCTL_SYSOSC_FREQ_BASE);
+	/* Set default configuration */
+	DL_SYSCTL_disableHFXT();
+	DL_SYSCTL_disableSYSPLL();
+    DL_SYSCTL_configSYSPLL((DL_SYSCTL_SYSPLLConfig *) &gSYSPLLConfig);
+    DL_SYSCTL_setULPCLKDivider(DL_SYSCTL_ULPCLK_DIV_2);
+    DL_SYSCTL_setMCLKSource(SYSOSC, HSCLK, DL_SYSCTL_HSCLK_SOURCE_SYSPLL);
     /* INT_GROUP1 Priority */
     NVIC_SetPriority(GPIOB_INT_IRQn, 1);
 
@@ -176,8 +195,8 @@ SYSCONFIG_WEAK void SYSCFG_DL_I2C_MPU6050_init(void) {
 
     /* Configure Controller Mode */
     DL_I2C_resetControllerTransfer(I2C_MPU6050_INST);
-    /* Set frequency to 100000 Hz*/
-    DL_I2C_setTimerPeriod(I2C_MPU6050_INST, 31);
+    /* Set frequency to 400000 Hz*/
+    DL_I2C_setTimerPeriod(I2C_MPU6050_INST, 9);
     DL_I2C_setControllerTXFIFOThreshold(I2C_MPU6050_INST, DL_I2C_TX_FIFO_LEVEL_EMPTY);
     DL_I2C_setControllerRXFIFOThreshold(I2C_MPU6050_INST, DL_I2C_RX_FIFO_LEVEL_BYTES_1);
     DL_I2C_enableControllerClockStretching(I2C_MPU6050_INST);
@@ -187,5 +206,13 @@ SYSCONFIG_WEAK void SYSCFG_DL_I2C_MPU6050_init(void) {
     DL_I2C_enableController(I2C_MPU6050_INST);
 
 
+}
+
+SYSCONFIG_WEAK void SYSCFG_DL_SYSTICK_init(void)
+{
+    /* Initialize the period to 209.72 ms */
+    DL_SYSTICK_init(16777216);
+    /* Enable the SysTick and start counting */
+    DL_SYSTICK_enable();
 }
 

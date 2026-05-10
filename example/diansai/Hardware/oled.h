@@ -61,6 +61,7 @@ void OLED_Clear(void);
 void OLED_ShowChar(u8 x, u8 y, u8 chr, u8 sizey);
 u32 oled_pow(u8 m, u8 n);
 void OLED_ShowNum(u8 x, u8 y, u32 num, u8 len, u8 sizey);
+void OLED_ShowFloat(u8 x, u8 y, float num, u8 len, u8 prec, u8 sizey);
 void OLED_ShowString(u8 x, u8 y, u8 *chr, u8 sizey);
 void OLED_ShowChinese(u8 x, u8 y, u8 no, u8 sizey);
 void OLED_DrawBMP(u8 x, u8 y, u8 sizex, u8 sizey, u8 BMP[]);

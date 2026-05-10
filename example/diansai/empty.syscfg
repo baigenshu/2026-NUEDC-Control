@@ -9,17 +9,30 @@
 /**
  * Import the modules used in this configuration.
  */
-const GPIO   = scripting.addModule("/ti/driverlib/GPIO", {}, false);
-const GPIO1  = GPIO.addInstance();
-const GPIO2  = GPIO.addInstance();
-const GPIO3  = GPIO.addInstance();
-const I2C    = scripting.addModule("/ti/driverlib/I2C", {}, false);
-const I2C1   = I2C.addInstance();
-const SYSCTL = scripting.addModule("/ti/driverlib/SYSCTL");
+const GPIO    = scripting.addModule("/ti/driverlib/GPIO", {}, false);
+const GPIO1   = GPIO.addInstance();
+const GPIO2   = GPIO.addInstance();
+const GPIO3   = GPIO.addInstance();
+const I2C     = scripting.addModule("/ti/driverlib/I2C", {}, false);
+const I2C1    = I2C.addInstance();
+const SYSCTL  = scripting.addModule("/ti/driverlib/SYSCTL");
+const SYSTICK = scripting.addModule("/ti/driverlib/SYSTICK");
 
 /**
  * Write custom configuration values to the imported modules.
  */
+const divider7       = system.clockTree["PLL_PDIV"];
+divider7.divideValue = 2;
+
+const divider9       = system.clockTree["UDIV"];
+divider9.divideValue = 2;
+
+const multiplier2         = system.clockTree["PLL_QDIV"];
+multiplier2.multiplyValue = 5;
+
+const mux8       = system.clockTree["HSCLKMUX"];
+mux8.inputSelect = "HSCLKMUX_SYSPLL2X";
+
 GPIO1.$name                          = "GPIO_OLED";
 GPIO1.port                           = "PORTB";
 GPIO1.associatedPins.create(5);
@@ -50,6 +63,7 @@ GPIO2.associatedPins[0].internalResistor  = "PULL_UP";
 GPIO2.associatedPins[0].interruptEn       = true;
 GPIO2.associatedPins[0].interruptPriority = "1";
 GPIO2.associatedPins[0].polarity          = "FALL";
+GPIO2.associatedPins[0].assignedPin       = "1";
 GPIO2.associatedPins[0].pin.$assign       = "PB1";
 
 GPIO3.$name                              = "GPIO_GRAY";
@@ -97,6 +111,8 @@ GPIO3.associatedPins[7].internalResistor = "PULL_UP";
 
 I2C1.basicEnableController             = true;
 I2C1.$name                             = "I2C_MPU6050";
+I2C1.basicControllerStandardBusSpeed   = "Fast";
+I2C1.peripheral.$assign                = "I2C1";
 I2C1.peripheral.sdaPin.$assign         = "PB3";
 I2C1.peripheral.sclPin.$assign         = "PB2";
 I2C1.sdaPinConfig.$name                = "ti_driverlib_gpio_GPIOPinGeneric0";
@@ -111,6 +127,12 @@ I2C1.sclPinConfig.passedPeripheralType = scripting.forceWrite("Digital");
 I2C1.sclPinConfig.enableConfig         = true;
 
 SYSCTL.forceDefaultClkConfig = true;
+SYSCTL.clockTreeEn           = true;
+scripting.suppress("For best practices when the CPUCLK is running at 32MHz and above, clear the flash status bit using DL_FlashCTL_executeClearStatus\\(\\) before executing any flash operation\\. Otherwise there may be false positives\\.", SYSCTL);
+
+SYSTICK.periodEnable  = true;
+SYSTICK.systickEnable = true;
+SYSTICK.period        = 16777216;
 
 /**
  * Pinmux solution for unlocked pins/peripherals. This ensures that minor changes to the automatic solver in a future
@@ -132,5 +154,3 @@ GPIO3.associatedPins[4].pin.$suggestSolution = "PB20";
 GPIO3.associatedPins[5].pin.$suggestSolution = "PB25";
 GPIO3.associatedPins[6].pin.$suggestSolution = "PA25";
 GPIO3.associatedPins[7].pin.$suggestSolution = "PA27";
-I2C1.peripheral.$suggestSolution             = "I2C1";
-SYSCTL.peripheral.$suggestSolution           = "SYSCTL";

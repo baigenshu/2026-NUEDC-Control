@@ -1,6 +1,6 @@
 #include "ti_msp_dl_config.h"
 #include "oled.h"
-#include "delay.h"
+#include "bsp_systick.h"
 #include "oledfont.h"  	 
 //OLED的显存
 //存放格式如下.
@@ -156,6 +156,68 @@ void OLED_ShowNum(u8 x,u8 y,u32 num,u8 len,u8 sizey)
     OLED_ShowChar(x+(sizey/2+m)*t,y,temp+'0',sizey);
   }
 }
+//显示浮点数
+//x,y       : 起点坐标
+//num       : 要显示的浮点数
+//len       : 数字总宽度（含小数点和小数部分）
+//prec      : 小数位数
+//sizey     : 字体大小
+void OLED_ShowFloat(u8 x, u8 y, float num, u8 len, u8 prec, u8 sizey)
+{
+	u8 t, m = 0;
+	int int_part;
+	uint32_t dec_part;
+	uint32_t pow10 = 1;
+	u8 enshow = 0;
+
+	if (sizey == 8) m = 2;
+
+	/* 处理负数 */
+	if (num < 0)
+	{
+		OLED_ShowChar(x, y, '-', sizey);
+		x += (sizey / 2 + m);
+		num = -num;
+		len--;
+	}
+
+	/* 计算 10^prec */
+	for (t = 0; t < prec; t++) pow10 *= 10;
+
+	/* 四舍五入取整 */
+	int_part = (int)(num + 0.5f / pow10);
+	dec_part = (uint32_t)((num - (int)num) * pow10 + 0.5f);
+
+	/* 小数字段长度修正：如果四舍五入导致进位，整数部分会多一位 */
+	if (dec_part >= pow10) { dec_part = 0; int_part++; }
+
+	/* 显示整数部分 */
+	for (t = 0; t < len - prec - 1; t++)
+	{
+		uint8_t digit = (int_part / oled_pow(10, len - prec - 2 - t)) % 10;
+		if (enshow == 0 && t < (len - prec - 2))
+		{
+			if (digit == 0)
+			{
+				OLED_ShowChar(x + (sizey / 2 + m) * t, y, ' ', sizey);
+				continue;
+			}
+			else enshow = 1;
+		}
+		OLED_ShowChar(x + (sizey / 2 + m) * t, y, digit + '0', sizey);
+	}
+
+	/* 小数点 */
+	OLED_ShowChar(x + (sizey / 2 + m) * (len - prec - 1), y, '.', sizey);
+
+	/* 显示小数部分 */
+	for (t = 0; t < prec; t++)
+	{
+		uint8_t digit = (dec_part / oled_pow(10, prec - 1 - t)) % 10;
+		OLED_ShowChar(x + (sizey / 2 + m) * (len - prec + t), y, digit + '0', sizey);
+	}
+}
+
 //显示一个字符号串
 void OLED_ShowString(u8 x,u8 y,u8 *chr,u8 sizey)
 {
@@ -216,7 +278,7 @@ void OLED_Init(void)
   OLED_DC_Set();
   OLED_CS_Set();
   OLED_RES_Clr();
-  Delay_ms(200);
+  delay_ms(200);
   OLED_RES_Set();
   
   OLED_WR_Byte(0xAE,OLED_CMD); /*display off*/ 

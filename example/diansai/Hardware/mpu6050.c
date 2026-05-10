@@ -1,6 +1,6 @@
-#include "i2c.h"
+#include "bsp_iic.h"
+#include "bsp_systick.h"
 #include "mpu6050.h"
-#include "delay.h"
 #include "math.h"
 
 #define MPU6050_ADDR		0x68		//MPU6050的7位I2C从机地址
@@ -12,7 +12,7 @@
 /* 互补滤波系数 */
 #define FILTER_ALPHA    (0.90f)
 
-/* 全局欧拉角 */
+/* 全局欧拉角（与头文件 extern 声明匹配） */
 volatile float roll  = 0.0f;
 volatile float pitch = 0.0f;
 volatile float yaw   = 0.0f;
@@ -31,7 +31,7 @@ volatile uint8_t MPU6050_DataReady = 0;
   */
 void MPU6050_WriteReg(uint8_t RegAddress, uint8_t Data)
 {
-	I2C_Write(MPU6050_ADDR, RegAddress, Data);
+	User_sIICDev.write_reg(MPU6050_ADDR << 1, RegAddress, &Data, 1, 100);
 }
 
 /**
@@ -39,7 +39,9 @@ void MPU6050_WriteReg(uint8_t RegAddress, uint8_t Data)
   */
 uint8_t MPU6050_ReadReg(uint8_t RegAddress)
 {
-	return I2C_Read(MPU6050_ADDR, RegAddress);
+	uint8_t data = 0;
+	User_sIICDev.read_reg(MPU6050_ADDR << 1, RegAddress, &data, 1, 100);
+	return data;
 }
 
 /**
@@ -85,7 +87,7 @@ void MPU6050_GetData(int16_t *AccX, int16_t *AccY, int16_t *AccZ,
 {
 	uint8_t buf[14];
 
-	I2C_ReadMulti(MPU6050_ADDR, MPU6050_ACCEL_XOUT_H, buf, 14);
+	User_sIICDev.read_reg(MPU6050_ADDR << 1, MPU6050_ACCEL_XOUT_H, buf, 14, 100);
 
 	*AccX = (int16_t)((buf[0] << 8) | buf[1]);
 	*AccY = (int16_t)((buf[2] << 8) | buf[3]);
@@ -111,7 +113,7 @@ void MPU6050_Calibrate(void)
 		sum_gx += gx;
 		sum_gy += gy;
 		sum_gz += gz;
-		Delay_ms(5);    // 在delay.h中声明，实际调用delay.c的Delay_ms
+		delay_ms(5);
 	}
 
 	gx_offset = (int16_t)(sum_gx / 100);
@@ -142,7 +144,7 @@ void MPU6050_Calculate(void)
 	MPU6050_GetData(&ax, &ay, &az, &gx, &gy, &gz);
 
 	/* ----- 计算dt (单位:秒) ----- */
-	now = g_sysTick;
+	now = Systick_getTick();
 	if (last_tick == 0) last_tick = now;
 	dt = (float)(now - last_tick) / 1000.0f;
 	last_tick = now;
@@ -173,3 +175,4 @@ void MPU6050_Calculate(void)
 	pitch = FILTER_ALPHA * pitch + (1.0f - FILTER_ALPHA) * pitch_a;
 	/* yaw 没有加速度计修正，仅靠陀螺仪，会缓慢漂移 */
 }
+

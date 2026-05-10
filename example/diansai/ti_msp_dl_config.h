@@ -73,7 +73,8 @@ extern "C" {
 #define POWER_STARTUP_DELAY                                                (16)
 
 
-#define CPUCLK_FREQ                                                     32000000
+
+#define CPUCLK_FREQ                                                     80000000
 
 
 
@@ -82,7 +83,7 @@ extern "C" {
 #define I2C_MPU6050_INST                                                    I2C1
 #define I2C_MPU6050_INST_IRQHandler                              I2C1_IRQHandler
 #define I2C_MPU6050_INST_INT_IRQN                                  I2C1_INT_IRQn
-#define I2C_MPU6050_BUS_SPEED_HZ                                          100000
+#define I2C_MPU6050_BUS_SPEED_HZ                                          400000
 #define GPIO_I2C_MPU6050_SDA_PORT                                          GPIOB
 #define GPIO_I2C_MPU6050_SDA_PIN                                   DL_GPIO_PIN_3
 #define GPIO_I2C_MPU6050_IOMUX_SDA                               (IOMUX_PINCM16)
@@ -155,6 +156,8 @@ extern "C" {
 #define GPIO_GRAY_PIN_7_PIN                                     (DL_GPIO_PIN_27)
 #define GPIO_GRAY_PIN_7_IOMUX                                    (IOMUX_PINCM60)
 
+
+
 /* clang-format on */
 
 void SYSCFG_DL_init(void);
@@ -163,6 +166,7 @@ void SYSCFG_DL_GPIO_init(void);
 void SYSCFG_DL_SYSCTL_init(void);
 void SYSCFG_DL_I2C_MPU6050_init(void);
 
+void SYSCFG_DL_SYSTICK_init(void);
 
 
 #ifdef __cplusplus
