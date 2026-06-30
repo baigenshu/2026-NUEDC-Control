@@ -15,7 +15,8 @@
                 "d:\\TI\\mspm0_sdk_2_05_01_00\\source\\ti\\driverlib",
                 "d:\\TI\\mspm0_sdk_2_05_01_00\\source\\ti\\driverlib\\m0p",
                 "d:\\TI\\mspm0_sdk_2_05_01_00\\source\\ti\\driverlib\\m0p\\sysctl",
-                "d:\\TI\\project\\example\\diansai\\keil"
+                "d:\\TI\\project\\example\\diansai\\keil",
+                "d:\\TI\\project\\example\\diansai\\hardware"
             ],
             "defines": [
                 "__MSPM0G3507__",

@@ -41,8 +41,8 @@ void MPU6050_Calculate(void);   // 计算欧拉角（每5ms调用一次）
 void MPU6050_INT_Init(void);    // 配置 MPU6050 INT 引脚（数据就绪中断）
 extern volatile uint8_t MPU6050_DataReady;  // 数据就绪标志
 
-extern volatile float roll;     // 横滚角 (度)
-extern volatile float pitch;    // 俯仰角 (度)
-extern volatile float yaw;      // 偏航角 (度)
+extern volatile int16_t roll;     // 横滚角 (度)
+extern volatile int16_t pitch;    // 俯仰角 (度)
+extern volatile int16_t yaw;      // 偏航角 (度)
 
 #endif

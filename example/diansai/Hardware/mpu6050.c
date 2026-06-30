@@ -12,10 +12,15 @@
 /* 互补滤波系数 */
 #define FILTER_ALPHA    (0.90f)
 
-/* 全局欧拉角（与头文件 extern 声明匹配） */
-volatile float roll  = 0.0f;
-volatile float pitch = 0.0f;
-volatile float yaw   = 0.0f;
+/* 内部浮点欧拉角（保留精度用于互补滤波计算） */
+static float roll_f  = 0.0f;
+static float pitch_f = 0.0f;
+static float yaw_f   = 0.0f;
+
+/* 对外输出的整数欧拉角（与头文件 extern 声明匹配） */
+volatile int16_t roll  = 0;
+volatile int16_t pitch = 0;
+volatile int16_t yaw   = 0;
 
 /* 陀螺仪零偏值（校准后使用） */
 static int16_t gx_offset = 0, gy_offset = 0, gz_offset = 0;
@@ -121,9 +126,9 @@ void MPU6050_Calibrate(void)
 	gz_offset = (int16_t)(sum_gz / 100);
 
 	/* 复位欧拉角 */
-	roll = 0.0f;
-	pitch = 0.0f;
-	yaw = 0.0f;
+	roll_f = 0.0f;
+	pitch_f = 0.0f;
+	yaw_f = 0.0f;
 	last_tick = 0;
 }
 
@@ -158,9 +163,9 @@ void MPU6050_Calculate(void)
 	gy_dps = (float)(gy - gy_offset) / GYRO_SCALE;
 	gz_dps = (float)(gz - gz_offset) / GYRO_SCALE;
 
-	roll  += gx_dps * dt;
-	pitch += gy_dps * dt;
-	yaw   += gz_dps * dt;
+	roll_f  += gx_dps * dt;
+	pitch_f += gy_dps * dt;
+	yaw_f   += gz_dps * dt;
 
 	/* ----- 加速度计解算姿态 (单位:度) ----- */
 	ax_g = (float)ax / ACCEL_SCALE;
@@ -171,8 +176,12 @@ void MPU6050_Calculate(void)
 	pitch_a = atan2f(-ax_g, sqrtf(ay_g * ay_g + az_g * az_g)) * 180.0f / 3.14159265f;
 
 	/* ----- 一阶互补滤波 ----- */
-	roll  = FILTER_ALPHA * roll  + (1.0f - FILTER_ALPHA) * roll_a;
-	pitch = FILTER_ALPHA * pitch + (1.0f - FILTER_ALPHA) * pitch_a;
+	roll_f  = FILTER_ALPHA * roll_f  + (1.0f - FILTER_ALPHA) * roll_a;
+	pitch_f = FILTER_ALPHA * pitch_f + (1.0f - FILTER_ALPHA) * pitch_a;
 	/* yaw 没有加速度计修正，仅靠陀螺仪，会缓慢漂移 */
-}
 
+	/* 浮点结果取整输出给外部使用 */
+	roll  = (int16_t)roll_f;
+	pitch = (int16_t)pitch_f;
+	yaw   = (int16_t)yaw_f;
+}
