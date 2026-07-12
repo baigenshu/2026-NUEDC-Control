@@ -8,5 +8,6 @@
 #include "bsp_iic.h"
 #include "mpu6050.h"
 #include "encoder.h"
+#include "step_motor.h"
 
 #endif /* __BOARD_H */

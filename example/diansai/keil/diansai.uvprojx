@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>__MSPM0G3507__</Define>
               <Undefine></Undefine>
-              <IncludePath>..\..\..\Source\third_party\CMSIS\Core\Include;..\..\..\Source;..\..\diansai;..\Function;..\Hardware</IncludePath>
+              <IncludePath>..\..\..\Source\third_party\CMSIS\Core\Include;..\..\..\Source;..\..\diansai;..\Function\Inc;..\Hardware\Inc</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -612,27 +612,27 @@
             <File>
               <FileName>board.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\Function\board.h</FilePath>
-            </File>
-            <File>
-              <FileName>bsp_systick.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Function\bsp_systick.c</FilePath>
-            </File>
-            <File>
-              <FileName>bsp_systick.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\Function\bsp_systick.h</FilePath>
-            </File>
-            <File>
-              <FileName>bsp_iic.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Function\bsp_iic.c</FilePath>
+              <FilePath>..\Function\Inc\board.h</FilePath>
             </File>
             <File>
               <FileName>bsp_iic.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\Function\bsp_iic.h</FilePath>
+              <FilePath>..\Function\Inc\bsp_iic.h</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_systick.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Function\Inc\bsp_systick.h</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_iic.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Function\Src\bsp_iic.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_systick.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Function\Src\bsp_systick.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -642,57 +642,67 @@
             <File>
               <FileName>grayscale_sensor.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Hardware\grayscale_sensor.c</FilePath>
+              <FilePath>..\Hardware\Src\grayscale_sensor.c</FilePath>
             </File>
             <File>
               <FileName>grayscale_sensor.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\Hardware\grayscale_sensor.h</FilePath>
+              <FilePath>..\Hardware\Inc\grayscale_sensor.h</FilePath>
             </File>
             <File>
               <FileName>mpu6050.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Hardware\mpu6050.c</FilePath>
+              <FilePath>..\Hardware\Src\mpu6050.c</FilePath>
             </File>
             <File>
               <FileName>mpu6050.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\Hardware\mpu6050.h</FilePath>
+              <FilePath>..\Hardware\Inc\mpu6050.h</FilePath>
             </File>
             <File>
               <FileName>motor.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\hardware\motor.c</FilePath>
+              <FilePath>..\Hardware\Src\motor.c</FilePath>
             </File>
             <File>
               <FileName>motor.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\hardware\motor.h</FilePath>
+              <FilePath>..\Hardware\Inc\motor.h</FilePath>
             </File>
             <File>
               <FileName>OLED.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Hardware\OLED.c</FilePath>
+              <FilePath>..\Hardware\Src\OLED.c</FilePath>
             </File>
             <File>
               <FileName>OLED.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\Hardware\OLED.h</FilePath>
+              <FilePath>..\Hardware\Inc\OLED.h</FilePath>
             </File>
             <File>
               <FileName>OLED_Font.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\Hardware\OLED_Font.h</FilePath>
+              <FilePath>..\Hardware\Inc\OLED_Font.h</FilePath>
             </File>
             <File>
               <FileName>encoder.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Hardware\encoder.c</FilePath>
+              <FilePath>..\Hardware\Src\encoder.c</FilePath>
             </File>
             <File>
               <FileName>encoder.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\hardware\encoder.h</FilePath>
+              <FilePath>..\Hardware\Inc\encoder.h</FilePath>
+            </File>
+            <File>
+              <FileName>step_motor.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Hardware\Src\step_motor.c</FilePath>
+            </File>
+            <File>
+              <FileName>step_motor.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Hardware\Inc\step_motor.h</FilePath>
             </File>
           </Files>
         </Group>

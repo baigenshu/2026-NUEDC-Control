@@ -6,8 +6,8 @@
                 "d:\\TI\\project\\Source\\third_party\\CMSIS\\Core\\Include",
                 "d:\\TI\\project\\Source",
                 "d:\\TI\\project\\example\\diansai",
-                "d:\\TI\\project\\example\\diansai\\Function",
-                "d:\\TI\\project\\example\\diansai\\Hardware",
+                "d:\\TI\\project\\example\\diansai\\Function\\Inc",
+                "d:\\TI\\project\\example\\diansai\\Hardware\\Inc",
                 "D:\\app\\Keil5 MDK\\ARM\\ARMCLANG\\include",
                 "D:\\app\\Keil5 MDK\\ARM\\ARMCLANG\\include\\arm_linux",
                 "D:\\app\\Keil5 MDK\\ARM\\ARMCLANG\\include\\arm_linux_compat",
@@ -16,7 +16,8 @@
                 "d:\\TI\\mspm0_sdk_2_05_01_00\\source\\ti\\driverlib\\m0p",
                 "d:\\TI\\mspm0_sdk_2_05_01_00\\source\\ti\\driverlib\\m0p\\sysctl",
                 "d:\\TI\\project\\example\\diansai\\keil",
-                "d:\\TI\\project\\example\\diansai\\hardware"
+                "d:\\TI\\project\\example\\diansai\\Function\\Src",
+                "d:\\TI\\project\\example\\diansai\\Hardware\\Src"
             ],
             "defines": [
                 "__MSPM0G3507__",

@@ -3,52 +3,52 @@
 
 int main(void)
 {
-    int16_t s;
+    uint8_t phase = 0;
 
     SYSCFG_DL_init();
     OLED_Init();
     OLED_Clear();
-    Motor_Init();
-    Encoder_Init();
+    Stepper_Init();
 
-    OLED_ShowString(1, 1, "Encoder Test");
+    OLED_ShowString(1, 1, "Stepper PWM Test");
 
     while (1)
     {
-        /* ---- Forward test: both motors ---- */
-        OLED_ShowString(2, 1, "A FWD  B FWD");
-        for (s = 20; s <= 60; s += 10)
-        {
-            MotorA_SetSpeed(s);
-            MotorB_SetSpeed(s);
-            Encoder_UpdateSpeed();
-            OLED_ShowString(3, 1, "CA:");
-            OLED_ShowNum(3, 4, (uint32_t)EncoderA_Count, 6);
-            OLED_ShowString(4, 1, "CB:");
-            OLED_ShowNum(4, 4, (uint32_t)EncoderB_Count, 6);
-            delay_ms(800);
-        }
-        MotorA_Brake(); MotorB_Brake();
-        delay_ms(1500);
+        /* Phase 0: S1 CW 90deg @ 30deg/s, S2 CW 90deg @ 30deg/s */
+        OLED_ShowString(2, 1, "Both CW 90@30");
+        Stepper_SetDir(STEPPER_1, DIR_CW);
+        Stepper_SetDir(STEPPER_2, DIR_CW);
+        Stepper_SetSpeed(STEPPER_1, 30);
+        Stepper_SetSpeed(STEPPER_2, 30);
+        Stepper_SetAngle(STEPPER_1, 90);
+        Stepper_SetAngle(STEPPER_2, 90);
+        OLED_ShowString(4, 1, "Running...");
+        while (!Stepper_IsDone(STEPPER_1) || !Stepper_IsDone(STEPPER_2));
+        OLED_ShowString(4, 1, "Done. Wait...");
+        delay_ms(2000);
 
-        /* ---- Reverse test ---- */
-        OLED_ShowString(2, 1, "A REV  B REV");
-        for (s = 20; s <= 60; s += 10)
-        {
-            MotorA_SetSpeed(-s);
-            MotorB_SetSpeed(-s);
-            Encoder_UpdateSpeed();
-            OLED_ShowString(3, 1, "CA:");
-            OLED_ShowSignedNum(3, 4, (int32_t)EncoderA_Count, 6);
-            OLED_ShowString(4, 1, "CB:");
-            OLED_ShowSignedNum(4, 4, (int32_t)EncoderB_Count, 6);
-            delay_ms(800);
-        }
-        MotorA_Brake(); MotorB_Brake();
-        delay_ms(1500);
+        /* Phase 1: Both CCW 90deg */
+        OLED_ShowString(2, 1, "Both CCW 90@30");
+        Stepper_SetDir(STEPPER_1, DIR_CCW);
+        Stepper_SetDir(STEPPER_2, DIR_CCW);
+        Stepper_SetAngle(STEPPER_1, 90);
+        Stepper_SetAngle(STEPPER_2, 90);
+        OLED_ShowString(4, 1, "Running...");
+        while (!Stepper_IsDone(STEPPER_1) || !Stepper_IsDone(STEPPER_2));
+        OLED_ShowString(4, 1, "Done. Wait...");
+        delay_ms(2000);
 
-        /* ---- Reset and loop ---- */
-        EncoderA_Reset();
-        EncoderB_Reset();
+        /* Phase 2: Differential (S1 CW, S2 CCW) at faster speed */
+        OLED_ShowString(2, 1, "Diff S1> S2< 60");
+        Stepper_SetDir(STEPPER_1, DIR_CW);
+        Stepper_SetDir(STEPPER_2, DIR_CCW);
+        Stepper_SetSpeed(STEPPER_1, 60);
+        Stepper_SetSpeed(STEPPER_2, 60);
+        Stepper_SetAngle(STEPPER_1, 180);
+        Stepper_SetAngle(STEPPER_2, 180);
+        OLED_ShowString(4, 1, "Running...");
+        while (!Stepper_IsDone(STEPPER_1) || !Stepper_IsDone(STEPPER_2));
+        OLED_ShowString(4, 1, "Done. Wait...");
+        delay_ms(2000);
     }
 }
