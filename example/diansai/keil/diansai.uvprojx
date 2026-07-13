@@ -650,16 +650,6 @@
               <FilePath>..\Hardware\Inc\grayscale_sensor.h</FilePath>
             </File>
             <File>
-              <FileName>mpu6050.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Hardware\Src\mpu6050.c</FilePath>
-            </File>
-            <File>
-              <FileName>mpu6050.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\Hardware\Inc\mpu6050.h</FilePath>
-            </File>
-            <File>
               <FileName>motor.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Hardware\Src\motor.c</FilePath>
@@ -703,6 +693,16 @@
               <FileName>step_motor.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\Hardware\Inc\step_motor.h</FilePath>
+            </File>
+            <File>
+              <FileName>imu601.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Hardware\Src\imu601.c</FilePath>
+            </File>
+            <File>
+              <FileName>imu601.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Hardware\Inc\imu601.h</FilePath>
             </File>
           </Files>
         </Group>

@@ -60,12 +60,14 @@ SYSCONFIG_WEAK void SYSCFG_DL_init(void)
     SYSCFG_DL_STEPPER2_PWM_init();
     SYSCFG_DL_STEPPER1_PWM_init();
     SYSCFG_DL_I2C_init();
+    SYSCFG_DL_IMU601_init();
     SYSCFG_DL_SPI_OLED_init();
     SYSCFG_DL_SYSTICK_init();
     /* Ensure backup structures have no valid state */
 	gPWMBBackup.backupRdy 	= false;
 	gSTEPPER2_PWMBackup.backupRdy 	= false;
 	gSTEPPER1_PWMBackup.backupRdy 	= false;
+
 	gSPI_OLEDBackup.backupRdy 	= false;
 
 }
@@ -107,6 +109,7 @@ SYSCONFIG_WEAK void SYSCFG_DL_initPower(void)
     DL_TimerA_reset(STEPPER2_PWM_INST);
     DL_TimerA_reset(STEPPER1_PWM_INST);
     DL_I2C_reset(I2C_INST);
+    DL_UART_Main_reset(IMU601_INST);
     DL_SPI_reset(SPI_OLED_INST);
 
 
@@ -117,6 +120,7 @@ SYSCONFIG_WEAK void SYSCFG_DL_initPower(void)
     DL_TimerA_enablePower(STEPPER2_PWM_INST);
     DL_TimerA_enablePower(STEPPER1_PWM_INST);
     DL_I2C_enablePower(I2C_INST);
+    DL_UART_Main_enablePower(IMU601_INST);
     DL_SPI_enablePower(SPI_OLED_INST);
 
     delay_cycles(POWER_STARTUP_DELAY);
@@ -147,15 +151,16 @@ SYSCONFIG_WEAK void SYSCFG_DL_GPIO_init(void)
     DL_GPIO_enableHiZ(GPIO_I2C_IOMUX_SCL);
 
     DL_GPIO_initPeripheralOutputFunction(
+        GPIO_IMU601_IOMUX_TX, GPIO_IMU601_IOMUX_TX_FUNC);
+    DL_GPIO_initPeripheralInputFunction(
+        GPIO_IMU601_IOMUX_RX, GPIO_IMU601_IOMUX_RX_FUNC);
+
+    DL_GPIO_initPeripheralOutputFunction(
         GPIO_SPI_OLED_IOMUX_SCLK, GPIO_SPI_OLED_IOMUX_SCLK_FUNC);
     DL_GPIO_initPeripheralOutputFunction(
         GPIO_SPI_OLED_IOMUX_PICO, GPIO_SPI_OLED_IOMUX_PICO_FUNC);
     DL_GPIO_initPeripheralInputFunction(
         GPIO_SPI_OLED_IOMUX_POCI, GPIO_SPI_OLED_IOMUX_POCI_FUNC);
-
-    DL_GPIO_initDigitalInputFeatures(GPIO_MPU6050_PIN_INT_IOMUX,
-		 DL_GPIO_INVERSION_DISABLE, DL_GPIO_RESISTOR_PULL_UP,
-		 DL_GPIO_HYSTERESIS_DISABLE, DL_GPIO_WAKEUP_DISABLE);
 
     DL_GPIO_initDigitalOutput(SPI_OLED_CTRL_CS_IOMUX);
 
@@ -269,18 +274,15 @@ SYSCONFIG_WEAK void SYSCFG_DL_GPIO_init(void)
 		GPIO_MOTOR_STBY_PIN |
 		GPIO_MOTOR_BIN1_PIN |
 		GPIO_MOTOR_BIN2_PIN);
-    DL_GPIO_setLowerPinsPolarity(GPIOB, DL_GPIO_PIN_1_EDGE_FALL |
-		DL_GPIO_PIN_0_EDGE_RISE_FALL |
+    DL_GPIO_setLowerPinsPolarity(GPIOB, DL_GPIO_PIN_0_EDGE_RISE_FALL |
 		DL_GPIO_PIN_5_EDGE_RISE_FALL |
 		DL_GPIO_PIN_12_EDGE_RISE_FALL);
     DL_GPIO_setUpperPinsPolarity(GPIOB, DL_GPIO_PIN_18_EDGE_RISE_FALL);
-    DL_GPIO_clearInterruptStatus(GPIOB, GPIO_MPU6050_PIN_INT_PIN |
-		GPIO_ENCODERA_E1A_PIN |
+    DL_GPIO_clearInterruptStatus(GPIOB, GPIO_ENCODERA_E1A_PIN |
 		GPIO_ENCODERA_E1B_PIN |
 		GPIO_ENCODERB_E2A_PIN |
 		GPIO_ENCODERB_E2B_PIN);
-    DL_GPIO_enableInterrupt(GPIOB, GPIO_MPU6050_PIN_INT_PIN |
-		GPIO_ENCODERA_E1A_PIN |
+    DL_GPIO_enableInterrupt(GPIOB, GPIO_ENCODERA_E1A_PIN |
 		GPIO_ENCODERA_E1B_PIN |
 		GPIO_ENCODERB_E2A_PIN |
 		GPIO_ENCODERB_E2B_PIN);
@@ -316,8 +318,6 @@ SYSCONFIG_WEAK void SYSCFG_DL_SYSCTL_init(void)
     DL_SYSCTL_configSYSPLL((DL_SYSCTL_SYSPLLConfig *) &gSYSPLLConfig);
     DL_SYSCTL_setULPCLKDivider(DL_SYSCTL_ULPCLK_DIV_2);
     DL_SYSCTL_setMCLKSource(SYSOSC, HSCLK, DL_SYSCTL_HSCLK_SOURCE_SYSPLL);
-    /* INT_GROUP1 Priority */
-    NVIC_SetPriority(GPIOB_INT_IRQn, 1);
 
 }
 
@@ -526,6 +526,42 @@ SYSCONFIG_WEAK void SYSCFG_DL_I2C_init(void) {
     DL_I2C_enableController(I2C_INST);
 
 
+}
+
+static const DL_UART_Main_ClockConfig gIMU601ClockConfig = {
+    .clockSel    = DL_UART_MAIN_CLOCK_BUSCLK,
+    .divideRatio = DL_UART_MAIN_CLOCK_DIVIDE_RATIO_1
+};
+
+static const DL_UART_Main_Config gIMU601Config = {
+    .mode        = DL_UART_MAIN_MODE_NORMAL,
+    .direction   = DL_UART_MAIN_DIRECTION_TX_RX,
+    .flowControl = DL_UART_MAIN_FLOW_CONTROL_NONE,
+    .parity      = DL_UART_MAIN_PARITY_NONE,
+    .wordLength  = DL_UART_MAIN_WORD_LENGTH_8_BITS,
+    .stopBits    = DL_UART_MAIN_STOP_BITS_ONE
+};
+
+SYSCONFIG_WEAK void SYSCFG_DL_IMU601_init(void)
+{
+    DL_UART_Main_setClockConfig(IMU601_INST, (DL_UART_Main_ClockConfig *) &gIMU601ClockConfig);
+
+    DL_UART_Main_init(IMU601_INST, (DL_UART_Main_Config *) &gIMU601Config);
+    /*
+     * Configure baud rate by setting oversampling and baud rate divisors.
+     *  Target baud rate: 115200
+     *  Actual baud rate: 115190.78
+     */
+    DL_UART_Main_setOversampling(IMU601_INST, DL_UART_OVERSAMPLING_RATE_16X);
+    DL_UART_Main_setBaudRateDivisor(IMU601_INST, IMU601_IBRD_40_MHZ_115200_BAUD, IMU601_FBRD_40_MHZ_115200_BAUD);
+
+
+    /* Configure Interrupts */
+    DL_UART_Main_enableInterrupt(IMU601_INST,
+                                 DL_UART_MAIN_INTERRUPT_RX);
+
+
+    DL_UART_Main_enable(IMU601_INST);
 }
 
 static const DL_SPI_Config gSPI_OLED_config = {

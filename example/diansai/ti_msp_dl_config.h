@@ -144,6 +144,26 @@ extern "C" {
 #define GPIO_I2C_IOMUX_SCL_FUNC                        IOMUX_PINCM15_PF_I2C1_SCL
 
 
+/* Defines for IMU601 */
+#define IMU601_INST                                                        UART1
+#define IMU601_INST_FREQUENCY                                           40000000
+#define IMU601_INST_IRQHandler                                  UART1_IRQHandler
+#define IMU601_INST_INT_IRQN                                      UART1_INT_IRQn
+#define GPIO_IMU601_RX_PORT                                                GPIOA
+#define GPIO_IMU601_TX_PORT                                                GPIOA
+#define GPIO_IMU601_RX_PIN                                         DL_GPIO_PIN_9
+#define GPIO_IMU601_TX_PIN                                         DL_GPIO_PIN_8
+#define GPIO_IMU601_IOMUX_RX                                     (IOMUX_PINCM20)
+#define GPIO_IMU601_IOMUX_TX                                     (IOMUX_PINCM19)
+#define GPIO_IMU601_IOMUX_RX_FUNC                      IOMUX_PINCM20_PF_UART1_RX
+#define GPIO_IMU601_IOMUX_TX_FUNC                      IOMUX_PINCM19_PF_UART1_TX
+#define IMU601_BAUD_RATE                                                (115200)
+#define IMU601_IBRD_40_MHZ_115200_BAUD                                      (21)
+#define IMU601_FBRD_40_MHZ_115200_BAUD                                      (45)
+
+
+
+
 /* Defines for SPI_OLED */
 #define SPI_OLED_INST                                                      SPI1
 #define SPI_OLED_INST_IRQHandler                                SPI1_IRQHandler
@@ -164,17 +184,6 @@ extern "C" {
 
 
 
-/* Port definition for Pin Group GPIO_MPU6050 */
-#define GPIO_MPU6050_PORT                                                (GPIOB)
-
-/* Defines for PIN_INT: GPIOB.1 with pinCMx 13 on package pin 48 */
-// groups represented: ["GPIO_ENCODERA","GPIO_ENCODERB","GPIO_MPU6050"]
-// pins affected: ["E1A","E1B","E2A","E2B","PIN_INT"]
-#define GPIO_MULTIPLE_GPIOB_INT_IRQN                            (GPIOB_INT_IRQn)
-#define GPIO_MULTIPLE_GPIOB_INT_IIDX            (DL_INTERRUPT_GROUP1_IIDX_GPIOB)
-#define GPIO_MPU6050_PIN_INT_IIDX                            (DL_GPIO_IIDX_DIO1)
-#define GPIO_MPU6050_PIN_INT_PIN                                 (DL_GPIO_PIN_1)
-#define GPIO_MPU6050_PIN_INT_IOMUX                               (IOMUX_PINCM13)
 /* Port definition for Pin Group SPI_OLED_CTRL */
 #define SPI_OLED_CTRL_PORT                                               (GPIOB)
 
@@ -241,6 +250,10 @@ extern "C" {
 #define GPIO_ENCODERA_PORT                                               (GPIOB)
 
 /* Defines for E1A: GPIOB.0 with pinCMx 12 on package pin 47 */
+// groups represented: ["GPIO_ENCODERB","GPIO_ENCODERA"]
+// pins affected: ["E2A","E2B","E1A","E1B"]
+#define GPIO_MULTIPLE_GPIOB_INT_IRQN                            (GPIOB_INT_IRQn)
+#define GPIO_MULTIPLE_GPIOB_INT_IIDX            (DL_INTERRUPT_GROUP1_IIDX_GPIOB)
 #define GPIO_ENCODERA_E1A_IIDX                               (DL_GPIO_IIDX_DIO0)
 #define GPIO_ENCODERA_E1A_PIN                                    (DL_GPIO_PIN_0)
 #define GPIO_ENCODERA_E1A_IOMUX                                  (IOMUX_PINCM12)
@@ -303,6 +316,7 @@ void SYSCFG_DL_PWMB_init(void);
 void SYSCFG_DL_STEPPER2_PWM_init(void);
 void SYSCFG_DL_STEPPER1_PWM_init(void);
 void SYSCFG_DL_I2C_init(void);
+void SYSCFG_DL_IMU601_init(void);
 void SYSCFG_DL_SPI_OLED_init(void);
 
 void SYSCFG_DL_SYSTICK_init(void);

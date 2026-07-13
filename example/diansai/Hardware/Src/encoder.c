@@ -1,8 +1,9 @@
 #include "encoder.h"
-#include "mpu6050.h"
+//#include "mpu6050.h"
 #include "bsp_systick.h"
 
-/* Pulse counts — updated by ISR, read by application */
+/* Pulse counts — updated by ISR, read by application
+ * (MPU6050 INT / PB1 removed after switching to IMU601 over UART) */
 volatile int32_t EncoderA_Count = 0;
 volatile int32_t EncoderB_Count = 0;
 
@@ -17,7 +18,6 @@ static uint32_t prev_tick = 0;
 
 /*
  * GROUP1_IRQHandler — handles all GPIOB interrupts:
- *   PB1  (MPU6050 INT)     → sets MPU6050_DataReady flag
  *   PB0  (EncoderA PhaseA) → quadrature decode
  *   PB5  (EncoderA PhaseB)
  *   PB12 (EncoderB PhaseA)
@@ -29,14 +29,7 @@ void GROUP1_IRQHandler(void)
 
     status = DL_GPIO_getEnabledInterruptStatus(GPIOB,
         GPIO_ENCODERA_E1A_PIN | GPIO_ENCODERA_E1B_PIN |
-        GPIO_ENCODERB_E2A_PIN | GPIO_ENCODERB_E2B_PIN |
-        GPIO_MPU6050_PIN_INT_PIN);
-
-    /* --- MPU6050 INT (PB1, FALL edge) --- */
-    if (status & GPIO_MPU6050_PIN_INT_PIN)
-    {
-        MPU6050_DataReady = 1;
-    }
+        GPIO_ENCODERB_E2A_PIN | GPIO_ENCODERB_E2B_PIN);
 
     /* --- Encoder A Phase A (PB0, both edges) --- */
     if (status & GPIO_ENCODERA_E1A_PIN)

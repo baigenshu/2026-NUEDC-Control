@@ -30,7 +30,7 @@ typedef struct {
 
 extern IICInterface_t User_sIICDev;
 
-void mpu6050_i2c_sda_unlock(void);
+void i2c_sda_unlock(void);
 
 #endif /* __BSP_IIC_H */
 
