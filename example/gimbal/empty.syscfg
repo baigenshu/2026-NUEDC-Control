@@ -1,0 +1,115 @@
+/**
+ * Gimbal dual-stepper SysConfig (hand-maintained; mirrors ti_msp_dl_config.*)
+ * 仅使用板子已引出脚。
+ *
+ * Stepper1: PA0(STEP/TIMA0_C0) PA1(DIR) PA7(DCY) PA8(SLP) PA9(RST)
+ * Stepper2: PA15(STEP/TIMA1_C0) PA13(DIR) PA14(DCY) PA12(SLP) PA16(RST)
+ *
+ * @cliArgs --device "MSPM0G350X" --part "Default" --package "LQFP-48(PT)" --product "mspm0_sdk@2.05.01.00"
+ * @v2CliArgs --device "MSPM0G3507" --package "LQFP-48(PT)" --product "mspm0_sdk@2.05.01.00"
+ * @versions {"tool":"1.24.1+4189"}
+ */
+
+/**
+ * Import the modules used in this configuration.
+ */
+const GPIO    = scripting.addModule("/ti/driverlib/GPIO", {}, false);
+const GPIO1   = GPIO.addInstance();
+const GPIO2   = GPIO.addInstance();
+const PWM     = scripting.addModule("/ti/driverlib/PWM", {}, false);
+const PWM1    = PWM.addInstance();
+const PWM2    = PWM.addInstance();
+const SYSCTL  = scripting.addModule("/ti/driverlib/SYSCTL");
+const SYSTICK = scripting.addModule("/ti/driverlib/SYSTICK");
+
+/**
+ * Write custom configuration values to the imported modules.
+ */
+const divider9       = system.clockTree["UDIV"];
+divider9.divideValue = 2;
+
+const multiplier2         = system.clockTree["PLL_QDIV"];
+multiplier2.multiplyValue = 5;
+
+const divider7       = system.clockTree["PLL_PDIV"];
+/* PDIV=2 handled via clock tree defaults matching generated C */
+
+const mux8       = system.clockTree["HSCLKMUX"];
+mux8.inputSelect = "HSCLKMUX_SYSPLL2X";
+
+const Board = scripting.addModule("/ti/driverlib/Board", {}, false);
+
+GPIO1.$name                          = "STEPPER1";
+GPIO1.port                           = "PORTA";
+GPIO1.associatedPins.create(4);
+GPIO1.associatedPins[0].$name        = "DIR1";
+GPIO1.associatedPins[0].pin.$assign  = "PA1";
+GPIO1.associatedPins[1].$name        = "DCY1";
+GPIO1.associatedPins[1].initialValue = "SET";
+GPIO1.associatedPins[1].pin.$assign  = "PA7";
+GPIO1.associatedPins[2].$name        = "SLP1";
+GPIO1.associatedPins[2].initialValue = "SET";
+GPIO1.associatedPins[2].pin.$assign  = "PA8";
+GPIO1.associatedPins[3].$name        = "RST1";
+GPIO1.associatedPins[3].initialValue = "SET";
+GPIO1.associatedPins[3].pin.$assign  = "PA9";
+
+GPIO2.$name                          = "STEPPER2";
+GPIO2.port                           = "PORTA";
+GPIO2.associatedPins.create(4);
+GPIO2.associatedPins[0].$name        = "DIR2";
+GPIO2.associatedPins[0].pin.$assign  = "PA13";
+GPIO2.associatedPins[1].$name        = "DCY2";
+GPIO2.associatedPins[1].initialValue = "SET";
+GPIO2.associatedPins[1].pin.$assign  = "PA14";
+GPIO2.associatedPins[2].$name        = "SLP2";
+GPIO2.associatedPins[2].initialValue = "SET";
+GPIO2.associatedPins[2].pin.$assign  = "PA12";
+GPIO2.associatedPins[3].$name        = "RST2";
+GPIO2.associatedPins[3].initialValue = "SET";
+GPIO2.associatedPins[3].pin.$assign  = "PA16";
+
+PWM1.$name                              = "STEPPER1_PWM";
+PWM1.timerCount                         = 800;
+PWM1.clockPrescale                      = 1;
+PWM1.pwmMode                            = "EDGE_ALIGN";
+PWM1.ccIndex                            = [0];
+PWM1.interrupts                         = ["LOAD_EVENT"];
+PWM1.PWM_CHANNEL_0.$name                = "ti_driverlib_pwm_PWMTimerCC0";
+PWM1.PWM_CHANNEL_0.dutyCycle            = 50;
+PWM1.ccp0PinConfig.direction            = scripting.forceWrite("OUTPUT");
+PWM1.ccp0PinConfig.hideOutputInversion  = scripting.forceWrite(false);
+PWM1.ccp0PinConfig.onlyInternalResistor = scripting.forceWrite(false);
+PWM1.ccp0PinConfig.passedPeripheralType = scripting.forceWrite("Digital");
+PWM1.peripheral.$assign                 = "TIMA0";
+PWM1.peripheral.ccp0Pin.$assign         = "PA0";
+
+PWM2.$name                              = "STEPPER2_PWM";
+PWM2.timerCount                         = 800;
+PWM2.clockPrescale                      = 1;
+PWM2.pwmMode                            = "EDGE_ALIGN";
+PWM2.ccIndex                            = [0];
+PWM2.interrupts                         = ["LOAD_EVENT"];
+PWM2.PWM_CHANNEL_0.$name                = "ti_driverlib_pwm_PWMTimerCC1";
+PWM2.PWM_CHANNEL_0.dutyCycle            = 50;
+PWM2.ccp0PinConfig.direction            = scripting.forceWrite("OUTPUT");
+PWM2.ccp0PinConfig.hideOutputInversion  = scripting.forceWrite(false);
+PWM2.ccp0PinConfig.onlyInternalResistor = scripting.forceWrite(false);
+PWM2.ccp0PinConfig.passedPeripheralType = scripting.forceWrite("Digital");
+PWM2.peripheral.$assign                 = "TIMA1";
+PWM2.peripheral.ccp0Pin.$assign         = "PA15";
+
+SYSCTL.forceDefaultClkConfig = true;
+SYSCTL.clockTreeEn           = true;
+scripting.suppress("For best practices when the CPUCLK is running at 32MHz and above, clear the flash status bit using DL_FlashCTL_executeClearStatus\\(\\) before executing any flash operation\\. Otherwise there may be false positives\\.", SYSCTL);
+
+SYSTICK.periodEnable  = true;
+SYSTICK.systickEnable = true;
+SYSTICK.period        = 16777216;
+
+/**
+ * Pinmux solution for unlocked pins/peripherals.
+ */
+Board.peripheral.$suggestSolution            = "DEBUGSS";
+Board.peripheral.swclkPin.$suggestSolution   = "PA20";
+Board.peripheral.swdioPin.$suggestSolution   = "PA19";
