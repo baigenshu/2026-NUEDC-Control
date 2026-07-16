@@ -52,7 +52,7 @@
           <OutputName>template</OutputName>
           <CreateExecutable>1</CreateExecutable>
           <CreateLib>0</CreateLib>
-          <CreateHexFile>0</CreateHexFile>
+          <CreateHexFile>1</CreateHexFile>
           <DebugInformation>1</DebugInformation>
           <BrowseInformation>1</BrowseInformation>
           <ListingPath>.\Listings\</ListingPath>
@@ -615,14 +615,24 @@
               <FilePath>..\Function\Inc\board.h</FilePath>
             </File>
             <File>
-              <FileName>bsp_systick.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\Function\Inc\bsp_systick.h</FilePath>
+              <FileName>delay.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Function\Src\delay.c</FilePath>
             </File>
             <File>
-              <FileName>bsp_systick.c</FileName>
+              <FileName>delay.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Function\Inc\delay.h</FilePath>
+            </File>
+            <File>
+              <FileName>uart.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Function\Src\bsp_systick.c</FilePath>
+              <FilePath>..\Function\Src\uart.c</FilePath>
+            </File>
+            <File>
+              <FileName>uart.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Function\Inc\uart.h</FilePath>
             </File>
           </Files>
         </Group>

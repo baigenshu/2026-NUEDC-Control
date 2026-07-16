@@ -1,0 +1,37 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "J-Link: Debug MSPM0G3507",
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "jlink",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/keil/Objects/template.axf",
+            "device": "MSPM0G3507",
+            "interface": "swd",
+            "serialNumber": "",
+            "runToEntryPoint": "main",
+            "svdFile": "",
+            "showDevDebugOutput": "raw",
+            "serverpath": "D:/app/Jlink/JLinkGDBServerCL.exe",
+            "armToolchainPath": "D:/app/Keil5 MDK/ARM/ARMCLANG/bin",
+            "toolchainPrefix": "armclang",
+            "objdumpPath": "",
+            "gdbPath": "",
+            "preLaunchTask": "Keil: Build template"
+        },
+        {
+            "name": "J-Link: Attach (no download)",
+            "type": "cortex-debug",
+            "request": "attach",
+            "servertype": "jlink",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/keil/Objects/template.axf",
+            "device": "MSPM0G3507",
+            "interface": "swd",
+            "serverpath": "D:/app/Jlink/JLinkGDBServerCL.exe",
+            "armToolchainPath": "D:/app/Keil5 MDK/ARM/ARMCLANG/bin"
+        }
+    ]
+}

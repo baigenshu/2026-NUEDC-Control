@@ -1,52 +1,67 @@
 #include "ti_msp_dl_config.h"
-#include "board.h"
+#include "delay.h"
+#include "step_motor.h"
+#include "uart.h"
 
 /*
- * Gimbal dual-stepper smoke test
+ * 第二路步进 + 串口调试
  *
- * 接线 (板子已引出脚):
- *   S1: PA0(STEP) PA1(DIR) PA7(DCY) PA8(SLP) PA9(RST)
- *   S2: PA15(STEP) PA13(DIR) PA14(DCY) PA12(SLP) PA16(RST)
+ * 步进:
+ *   PA12=STEP  PA13=DIR  PA14=DCY  PA15=SLP  PA16=RST
+ * 串口 PRINT (UART0 115200):
+ *   PA28=TX  PA31=RX  → USB 转串口，终端 115200 8N1
  *
- * 驱动芯片: DCC-100v3, 6400 pulse/rev, 0.05625 deg/pulse
- * 循环: 两路同向 90° → 反向 90° → 差速 180°
+ * 每个 STEP 上升沿打印一个 '.'
+ * 每 100 步换行打印累计步数
+ *
+ * 串口比 GPIO 慢，加打印后脉冲会变慢，只用来确认软件在发脉冲。
  */
+static void uart_print_u32(uint32_t v)
+{
+    char tmp[12];
+    int i = 0;
+
+    if (v == 0U) {
+        UART_send_char(PRINT_INST, '0');
+        return;
+    }
+    while (v > 0U && i < (int)sizeof(tmp)) {
+        tmp[i++] = (char)('0' + (v % 10U));
+        v /= 10U;
+    }
+    while (i > 0) {
+        UART_send_char(PRINT_INST, tmp[--i]);
+    }
+}
+
 int main(void)
 {
+    uint32_t step_cnt = 0;
+
     SYSCFG_DL_init();
-    Stepper_Init();
+    step_motor_init();
+    NVIC_EnableIRQ(PRINT_INST_INT_IRQN);
 
-    while (1)
-    {
-        /* Phase 0: both CW 90° @ 30 deg/s */
-        Stepper_SetDir(STEPPER_1, DIR_CW);
-        Stepper_SetDir(STEPPER_2, DIR_CW);
-        Stepper_SetSpeed(STEPPER_1, 30);
-        Stepper_SetSpeed(STEPPER_2, 30);
-        Stepper_SetAngle(STEPPER_1, 90);
-        Stepper_SetAngle(STEPPER_2, 90);
-        while (!Stepper_IsDone(STEPPER_1) || !Stepper_IsDone(STEPPER_2))
-            ;
-        delay_ms(2000);
+    step_motor_dir_set(0, 2);
 
-        /* Phase 1: both CCW 90° @ 30 deg/s */
-        Stepper_SetDir(STEPPER_1, DIR_CCW);
-        Stepper_SetDir(STEPPER_2, DIR_CCW);
-        Stepper_SetAngle(STEPPER_1, 90);
-        Stepper_SetAngle(STEPPER_2, 90);
-        while (!Stepper_IsDone(STEPPER_1) || !Stepper_IsDone(STEPPER_2))
-            ;
-        delay_ms(2000);
+    // UART_send_string(PRINT_INST, "\r\n=== step motor debug ===\r\n");
+    // UART_send_string(PRINT_INST, "each '.' = 1 STEP rising edge\r\n");
 
-        /* Phase 2: differential S1 CW / S2 CCW 180° @ 60 deg/s */
-        Stepper_SetDir(STEPPER_1, DIR_CW);
-        Stepper_SetDir(STEPPER_2, DIR_CCW);
-        Stepper_SetSpeed(STEPPER_1, 60);
-        Stepper_SetSpeed(STEPPER_2, 60);
-        Stepper_SetAngle(STEPPER_1, 180);
-        Stepper_SetAngle(STEPPER_2, 180);
-        while (!Stepper_IsDone(STEPPER_1) || !Stepper_IsDone(STEPPER_2))
-            ;
-        delay_ms(2000);
+    while (1) {
+        /* STEP 上升沿：DRV8825 在此步进 */
+        step_motor_step_set(1, 2);
+        // UART_send_char(PRINT_INST, '.');
+        // step_cnt++;
+
+        // if ((step_cnt % 100U) == 0U) {
+        //     UART_send_string(PRINT_INST, " cnt=");
+        //     uart_print_u32(step_cnt);
+        //     UART_send_string(PRINT_INST, "\r\n");
+        // }
+
+        delay_ms(1);
+
+        step_motor_step_set(0, 2);
+        delay_ms(1);
     }
 }

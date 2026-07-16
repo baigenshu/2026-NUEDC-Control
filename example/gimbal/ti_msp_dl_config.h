@@ -34,14 +34,8 @@
  *  ============ ti_msp_dl_config.h =============
  *  Configured MSPM0 DriverLib module declarations
  *
- *  Gimbal project — dual DCC-100v3 stepper
- *  仅使用板子已引出脚:
- *    GPIOA: 0,1,7,8,9,12,13,14,15,16,17,22,24,25,26,27
- *    GPIOB: 2,3,6,7,16,17,20,24
- *
- *  Wiring:
- *    Stepper1: PA0(STEP=TIMA0_CCP0) PA1(DIR) PA7(DCY) PA8(SLP) PA9(RST)
- *    Stepper2: PA15(STEP=TIMA1_CCP0) PA13(DIR) PA14(DCY) PA12(SLP) PA16(RST)
+ *  DO NOT EDIT - This file is generated for the MSPM0G350X
+ *  by the SysConfig tool.
  */
 #ifndef ti_msp_dl_config_h
 #define ti_msp_dl_config_h
@@ -65,65 +59,84 @@
 extern "C" {
 #endif
 
+/*
+ *  ======== SYSCFG_DL_init ========
+ *  Perform all required MSP DL initialization
+ *
+ *  This function should be called once at a point before any use of
+ *  MSP DL.
+ */
+
+
 /* clang-format off */
 
 #define POWER_STARTUP_DELAY                                                (16)
 
+
+#define GPIO_HFXT_PORT                                                     GPIOA
+#define GPIO_HFXIN_PIN                                             DL_GPIO_PIN_5
+#define GPIO_HFXIN_IOMUX                                         (IOMUX_PINCM10)
+#define GPIO_HFXOUT_PIN                                            DL_GPIO_PIN_6
+#define GPIO_HFXOUT_IOMUX                                        (IOMUX_PINCM11)
 #define CPUCLK_FREQ                                                     80000000
 
-/* Defines for STEPPER1_PWM — TIMA0 @ PA0 (TIMA0_CCP0) */
-#define STEPPER1_PWM_INST                                                  TIMA0
-#define STEPPER1_PWM_INST_IRQHandler                            TIMA0_IRQHandler
-#define STEPPER1_PWM_INST_INT_IRQN                              (TIMA0_INT_IRQn)
-#define STEPPER1_PWM_INST_CLK_FREQ                                      80000000
-#define GPIO_STEPPER1_PWM_C0_PORT                                          GPIOA
-#define GPIO_STEPPER1_PWM_C0_PIN                                   DL_GPIO_PIN_0
-#define GPIO_STEPPER1_PWM_C0_IOMUX                                (IOMUX_PINCM1)
-#define GPIO_STEPPER1_PWM_C0_IOMUX_FUNC               IOMUX_PINCM1_PF_TIMA0_CCP0
-#define GPIO_STEPPER1_PWM_C0_IDX                             DL_TIMER_CC_0_INDEX
 
-/* Defines for STEPPER2_PWM — TIMA1 @ PA15 (TIMA1_CCP0) */
-#define STEPPER2_PWM_INST                                                  TIMA1
-#define STEPPER2_PWM_INST_IRQHandler                            TIMA1_IRQHandler
-#define STEPPER2_PWM_INST_INT_IRQN                              (TIMA1_INT_IRQn)
-#define STEPPER2_PWM_INST_CLK_FREQ                                      80000000
-#define GPIO_STEPPER2_PWM_C0_PORT                                          GPIOA
-#define GPIO_STEPPER2_PWM_C0_PIN                                  DL_GPIO_PIN_15
-#define GPIO_STEPPER2_PWM_C0_IOMUX                               (IOMUX_PINCM37)
-#define GPIO_STEPPER2_PWM_C0_IOMUX_FUNC              IOMUX_PINCM37_PF_TIMA1_CCP0
-#define GPIO_STEPPER2_PWM_C0_IDX                             DL_TIMER_CC_0_INDEX
 
-/* Port definition for Pin Group STEPPER1 */
-#define STEPPER1_PORT                                                    (GPIOA)
 
-/* DIR1: GPIOA.1  pinCMx 2 */
-#define STEPPER1_DIR1_PIN                                        (DL_GPIO_PIN_1)
-#define STEPPER1_DIR1_IOMUX                                       (IOMUX_PINCM2)
-/* DCY1: GPIOA.7  pinCMx 14 */
-#define STEPPER1_DCY1_PIN                                        (DL_GPIO_PIN_7)
-#define STEPPER1_DCY1_IOMUX                                      (IOMUX_PINCM14)
-/* SLP1: GPIOA.8  pinCMx 19 */
-#define STEPPER1_SLP1_PIN                                        (DL_GPIO_PIN_8)
-#define STEPPER1_SLP1_IOMUX                                      (IOMUX_PINCM19)
-/* RST1: GPIOA.9  pinCMx 20 */
-#define STEPPER1_RST1_PIN                                        (DL_GPIO_PIN_9)
-#define STEPPER1_RST1_IOMUX                                      (IOMUX_PINCM20)
+/* Defines for OLED */
+#define OLED_INST                                                           I2C1
+#define OLED_INST_IRQHandler                                     I2C1_IRQHandler
+#define OLED_INST_INT_IRQN                                         I2C1_INT_IRQn
+#define OLED_BUS_SPEED_HZ                                                 100000
+#define GPIO_OLED_SDA_PORT                                                 GPIOB
+#define GPIO_OLED_SDA_PIN                                          DL_GPIO_PIN_3
+#define GPIO_OLED_IOMUX_SDA                                      (IOMUX_PINCM16)
+#define GPIO_OLED_IOMUX_SDA_FUNC                       IOMUX_PINCM16_PF_I2C1_SDA
+#define GPIO_OLED_SCL_PORT                                                 GPIOB
+#define GPIO_OLED_SCL_PIN                                          DL_GPIO_PIN_2
+#define GPIO_OLED_IOMUX_SCL                                      (IOMUX_PINCM15)
+#define GPIO_OLED_IOMUX_SCL_FUNC                       IOMUX_PINCM15_PF_I2C1_SCL
 
-/* Port definition for Pin Group STEPPER2 */
-#define STEPPER2_PORT                                                    (GPIOA)
 
-/* DIR2: GPIOA.13 pinCMx 35 */
-#define STEPPER2_DIR2_PIN                                       (DL_GPIO_PIN_13)
-#define STEPPER2_DIR2_IOMUX                                      (IOMUX_PINCM35)
-/* DCY2: GPIOA.14 pinCMx 36 */
-#define STEPPER2_DCY2_PIN                                       (DL_GPIO_PIN_14)
-#define STEPPER2_DCY2_IOMUX                                      (IOMUX_PINCM36)
-/* SLP2: GPIOA.12 pinCMx 34 */
-#define STEPPER2_SLP2_PIN                                       (DL_GPIO_PIN_12)
-#define STEPPER2_SLP2_IOMUX                                      (IOMUX_PINCM34)
-/* RST2: GPIOA.16 pinCMx 38 */
-#define STEPPER2_RST2_PIN                                       (DL_GPIO_PIN_16)
-#define STEPPER2_RST2_IOMUX                                      (IOMUX_PINCM38)
+/* Defines for PRINT */
+#define PRINT_INST                                                         UART0
+#define PRINT_INST_FREQUENCY                                            40000000
+#define PRINT_INST_IRQHandler                                   UART0_IRQHandler
+#define PRINT_INST_INT_IRQN                                       UART0_INT_IRQn
+#define GPIO_PRINT_RX_PORT                                                 GPIOA
+#define GPIO_PRINT_TX_PORT                                                 GPIOA
+#define GPIO_PRINT_RX_PIN                                         DL_GPIO_PIN_31
+#define GPIO_PRINT_TX_PIN                                         DL_GPIO_PIN_28
+#define GPIO_PRINT_IOMUX_RX                                       (IOMUX_PINCM6)
+#define GPIO_PRINT_IOMUX_TX                                       (IOMUX_PINCM3)
+#define GPIO_PRINT_IOMUX_RX_FUNC                        IOMUX_PINCM6_PF_UART0_RX
+#define GPIO_PRINT_IOMUX_TX_FUNC                        IOMUX_PINCM3_PF_UART0_TX
+#define PRINT_BAUD_RATE                                                 (115200)
+#define PRINT_IBRD_40_MHZ_115200_BAUD                                       (21)
+#define PRINT_FBRD_40_MHZ_115200_BAUD                                       (45)
+
+
+
+
+
+/* Port definition for Pin Group STEP_MOTOR */
+#define STEP_MOTOR_PORT                                                  (GPIOA)
+
+/* Defines for PWM2: GPIOA.12 with pinCMx 34 on package pin 5 */
+#define STEP_MOTOR_PWM2_PIN                                     (DL_GPIO_PIN_12)
+#define STEP_MOTOR_PWM2_IOMUX                                    (IOMUX_PINCM34)
+/* Defines for DIR2: GPIOA.13 with pinCMx 35 on package pin 6 */
+#define STEP_MOTOR_DIR2_PIN                                     (DL_GPIO_PIN_13)
+#define STEP_MOTOR_DIR2_IOMUX                                    (IOMUX_PINCM35)
+/* Defines for DCY2: GPIOA.14 with pinCMx 36 on package pin 7 */
+#define STEP_MOTOR_DCY2_PIN                                     (DL_GPIO_PIN_14)
+#define STEP_MOTOR_DCY2_IOMUX                                    (IOMUX_PINCM36)
+/* Defines for SLP2: GPIOA.15 with pinCMx 37 on package pin 8 */
+#define STEP_MOTOR_SLP2_PIN                                     (DL_GPIO_PIN_15)
+#define STEP_MOTOR_SLP2_IOMUX                                    (IOMUX_PINCM37)
+/* Defines for RST2: GPIOA.16 with pinCMx 38 on package pin 9 */
+#define STEP_MOTOR_RST2_PIN                                     (DL_GPIO_PIN_16)
+#define STEP_MOTOR_RST2_IOMUX                                    (IOMUX_PINCM38)
 
 /* clang-format on */
 
@@ -131,9 +144,9 @@ void SYSCFG_DL_init(void);
 void SYSCFG_DL_initPower(void);
 void SYSCFG_DL_GPIO_init(void);
 void SYSCFG_DL_SYSCTL_init(void);
-void SYSCFG_DL_STEPPER1_PWM_init(void);
-void SYSCFG_DL_STEPPER2_PWM_init(void);
-void SYSCFG_DL_SYSTICK_init(void);
+void SYSCFG_DL_OLED_init(void);
+void SYSCFG_DL_PRINT_init(void);
+
 
 bool SYSCFG_DL_saveConfiguration(void);
 bool SYSCFG_DL_restoreConfiguration(void);

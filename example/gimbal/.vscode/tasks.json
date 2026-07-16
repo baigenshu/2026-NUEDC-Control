@@ -1,0 +1,28 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Keil: Build template",
+            "type": "shell",
+            "command": "UV4",
+            "args": [
+                "-b",
+                "${workspaceFolder}/keil/template.uvprojx",
+                "-j0",
+                "-o",
+                "${workspaceFolder}/keil/Objects/build_log.txt"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/keil",
+                "env": {
+                    "PATH": "D:\\app\\Keil5 MDK\\UV4;${env:PATH}"
+                }
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        }
+    ]
+}
