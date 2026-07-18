@@ -590,9 +590,9 @@
               <FilePath>..\ti_msp_dl_config.h</FilePath>
             </File>
             <File>
-              <FileName>mian.c</FileName>
+              <FileName>main.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\mian.c</FilePath>
+              <FilePath>..\main.c</FilePath>
             </File>
           </Files>
         </Group>

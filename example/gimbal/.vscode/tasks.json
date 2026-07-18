@@ -1,28 +1,151 @@
-{
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "Keil: Build template",
-            "type": "shell",
-            "command": "UV4",
-            "args": [
-                "-b",
-                "${workspaceFolder}/keil/template.uvprojx",
-                "-j0",
-                "-o",
-                "${workspaceFolder}/keil/Objects/build_log.txt"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}/keil",
-                "env": {
-                    "PATH": "D:\\app\\Keil5 MDK\\UV4;${env:PATH}"
-                }
-            },
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "problemMatcher": []
-        }
-    ]
+﻿{
+    "version":  "2.0.0",
+    "tasks":  [
+                  {
+                      "label":  "build (GCC)",
+                      "type":  "shell",
+                      "command":  "mingw32-make",
+                      "args":  [
+                                   "-j8"
+                               ],
+                      "options":  {
+                                      "cwd":  "${workspaceFolder}",
+                                      "env":  {
+                                                  "Path":  "D:\\app\\MinGW\\bin;D:\\arm\\GNU Toolchain mingw-w64-x86_64-arm-none-eabi\\bin;D:\\TI\\sysconfig_1.24.1;D:\\app\\Jlink;${env:Path}"
+                                              }
+                                  },
+                      "group":  {
+                                    "kind":  "build",
+                                    "isDefault":  true
+                                },
+                      "problemMatcher":  [
+                                             "$gcc"
+                                         ]
+                  },
+                  {
+                      "label":  "clean (GCC)",
+                      "type":  "shell",
+                      "command":  "mingw32-make",
+                      "args":  [
+                                   "clean"
+                               ],
+                      "options":  {
+                                      "cwd":  "${workspaceFolder}",
+                                      "env":  {
+                                                  "Path":  "D:\\app\\MinGW\\bin;${env:Path}"
+                                              }
+                                  },
+                      "problemMatcher":  [
+
+                                         ]
+                  },
+                  {
+                      "label":  "syscfg",
+                      "type":  "shell",
+                      "command":  "mingw32-make",
+                      "args":  [
+                                   "syscfg"
+                               ],
+                      "options":  {
+                                      "cwd":  "${workspaceFolder}",
+                                      "env":  {
+                                                  "Path":  "D:\\TI\\sysconfig_1.24.1;D:\\app\\MinGW\\bin;${env:Path}"
+                                              }
+                                  },
+                      "problemMatcher":  [
+
+                                         ]
+                  },
+                  {
+                      "label":  "syscfg-gui",
+                      "type":  "shell",
+                      "command":  "D:\\TI\\sysconfig_1.24.1\\sysconfig_gui.bat",
+                      "args":  [
+                                   "--product",
+                                   "D:/TI/mspm0_sdk_2_05_01_00/.metadata/product.json",
+                                   "--compiler",
+                                   "gcc",
+                                   "--output",
+                                   "${workspaceFolder}",
+                                   "${workspaceFolder}/empty.syscfg"
+                               ],
+                      "options":  {
+                                      "cwd":  "${workspaceFolder}"
+                                  },
+                      "problemMatcher":  [
+
+                                         ],
+                      "presentation":  {
+                                           "reveal":  "silent",
+                                           "panel":  "shared"
+                                       }
+                  },
+                  {
+                      "label":  "flash (GCC)",
+                      "type":  "shell",
+                      "command":  "mingw32-make",
+                      "args":  [
+                                   "flash"
+                               ],
+                      "options":  {
+                                      "cwd":  "${workspaceFolder}",
+                                      "env":  {
+                                                  "Path":  "D:\\app\\MinGW\\bin;D:\\arm\\GNU Toolchain mingw-w64-x86_64-arm-none-eabi\\bin;D:\\app\\Jlink;${env:Path}"
+                                              }
+                                  },
+                      "problemMatcher":  [
+
+                                         ],
+                      "dependsOn":  [
+                                        "build (GCC)"
+                                    ]
+                  },
+                  {
+                      "label":  "apply-paths",
+                      "type":  "shell",
+                      "command":  "powershell",
+                      "args":  [
+                                   "-NoProfile",
+                                   "-ExecutionPolicy",
+                                   "Bypass",
+                                   "-File",
+                                   "${workspaceFolder}/../common/scripts/apply_toolpaths.ps1",
+                                   "-ProjectRoot",
+                                   "${workspaceFolder}",
+                                   "-ToolpathsFile",
+                                   "${workspaceFolder}/../toolpaths.mk"
+                               ],
+                      "options":  {
+                                      "cwd":  "${workspaceFolder}"
+                                  },
+                      "problemMatcher":  [
+
+                                         ]
+                  },
+                  {
+                      "label":  "Keil: Build template",
+                      "type":  "shell",
+                      "command":  "UV4",
+                      "args":  [
+                                   "-b",
+                                   "${workspaceFolder}/keil/template.uvprojx",
+                                   "-j0",
+                                   "-o",
+                                   "${workspaceFolder}/keil/Objects/build_log.txt"
+                               ],
+                      "options":  {
+                                      "cwd":  "${workspaceFolder}/keil",
+                                      "env":  {
+                                                  "PATH":  "D:\\app\\Keil5 MDK\\UV4;${env:PATH}"
+                                              }
+                                  },
+                      "group":  {
+                                    "kind":  "build",
+                                    "isDefault":  false
+                                },
+                      "problemMatcher":  [
+
+                                         ]
+                  }
+              ]
 }

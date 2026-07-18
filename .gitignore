@@ -26,6 +26,9 @@ Build/
 Output/
 Listings/
 Objects/
+.claude/
+.vscode/
+.tmp/
 
 # 其他
 *.log

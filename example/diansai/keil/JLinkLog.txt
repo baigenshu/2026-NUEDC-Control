@@ -1,78 +1,62 @@
-TAF0C 000:007.253   SEGGER J-Link V6.98e Log File
-TAF0C 000:007.373   DLL Compiled: Mar 29 2021 14:18:39
-TAF0C 000:007.394   Logging started @ 2026-07-14 08:42
-TAF0C 000:007.414 - 7.424ms
-TAF0C 000:007.554 JLINK_SetWarnOutHandler(...)
-TAF0C 000:007.577 - 0.032ms
-TAF0C 000:007.598 JLINK_OpenEx(...)
-TAF0C 000:011.036   Firmware: J-Link V9 compiled May  7 2021 16:26:12
-TAF0C 000:011.455   Firmware: J-Link V9 compiled May  7 2021 16:26:12
-TAF0C 000:011.924   Decompressing FW timestamp took 319 us
-TAF0C 000:018.726   Hardware: V9.70
-TAF0C 000:018.785   S/N: 20781318
-TAF0C 000:018.815   OEM: SEGGER
-TAF0C 000:018.845   Feature(s): RDI, GDB, FlashBP, FlashDL, JFlash
-TAF0C 000:019.862   TELNET listener socket opened on port 19021
-TAF0C 000:019.950   WEBSRV Starting webserver
-TAF0C 000:020.084   WEBSRV Webserver running on local port 19080
-TAF0C 000:020.115 - 12.527ms returns "O.K."
-TAF0C 000:020.147 JLINK_GetEmuCaps()
-TAF0C 000:020.168 - 0.030ms returns 0xB9FF7BBF
-TAF0C 000:020.197 JLINK_TIF_GetAvailable(...)
-TAF0C 000:020.399 - 0.214ms
-TAF0C 000:020.424 JLINK_SetErrorOutHandler(...)
-TAF0C 000:020.446 - 0.032ms
-TAF0C 000:020.475 JLINK_ExecCommand("ProjectFile = "d:\TI\project\example\diansai\keil\JLinkSettings.ini"", ...). 
-TAF0C 000:045.080   Ref file found at: D:\app\Keil5 MDK\ARM\Segger\JLinkDevices.ref
-TAF0C 000:054.615   XML referenced by ref file: D:\app\Jlink\JLinkDevices.xml
-TAF0C 000:055.331   D:\app\Jlink\JLinkDevices.xml evaluated successfully.
-TAF0C 000:065.132   Device "CORTEX-M0+" selected.
-TAF0C 000:065.622 - 45.162ms returns 0x00
-TAF0C 000:065.848 JLINK_ExecCommand("Device = MSPM0G3507", ...). 
-TAF0C 000:066.022   Device "CORTEX-M0+" selected.
-TAF0C 000:066.493 - 0.636ms returns 0x00
-TAF0C 000:066.533 JLINK_GetHardwareVersion()
-TAF0C 000:066.554 - 0.030ms returns 97000
-TAF0C 000:066.575 JLINK_GetDLLVersion()
-TAF0C 000:066.595 - 0.029ms returns 69805
-TAF0C 000:066.616 JLINK_GetOEMString(...)
-TAF0C 000:066.644 JLINK_GetFirmwareString(...)
-TAF0C 000:066.664 - 0.029ms
-TAF0C 000:066.966 JLINK_GetDLLVersion()
-TAF0C 000:066.987 - 0.030ms returns 69805
-TAF0C 000:067.008 JLINK_GetCompileDateTime()
-TAF0C 000:067.028 - 0.029ms
-TAF0C 000:067.112 JLINK_GetFirmwareString(...)
-TAF0C 000:067.132 - 0.030ms
-TAF0C 000:067.238 JLINK_GetHardwareVersion()
-TAF0C 000:067.258 - 0.030ms returns 97000
-TAF0C 000:068.252 JLINK_GetSN()
-TAF0C 000:068.274 - 0.032ms returns 20781318
-TAF0C 000:070.149 JLINK_GetOEMString(...)
-TAF0C 000:070.642 JLINK_TIF_Select(JLINKARM_TIF_SWD)
-TAF0C 000:071.261 - 0.647ms returns 0x00
-TAF0C 000:071.304 JLINK_HasError()
-TAF0C 000:071.523 JLINK_SetSpeed(5000)
-TAF0C 000:071.642 - 0.131ms
-TAF0C 000:071.667 JLINK_GetId()
-TAF0C 000:072.607   Found SW-DP with ID 0x6BA02477
-TAF0C 000:075.863   DPIDR: 0x6BA02477
-TAF0C 000:076.050   Scanning AP map to find all available APs
-TAF0C 000:076.697   AP[0]: Stopped AP scan as end of AP map seems to be reached
-TAF0C 000:077.109   Iterating through AP map to find AHB-AP to use
-TAF0C 000:077.203   
-  ***** Error: 
-TAF0C 000:077.236   Could not find core in Coresight setup
-TAF0C 000:250.328   Found SW-DP with ID 0x6BA02477
-TAF0C 000:252.650   DPIDR: 0x6BA02477
-TAF0C 000:252.903   Scanning AP map to find all available APs
-TAF0C 000:253.571   AP[0]: Stopped AP scan as end of AP map seems to be reached
-TAF0C 000:253.946   Iterating through AP map to find AHB-AP to use
-TAF0C 000:253.978   
-  ***** Error: 
-TAF0C 000:254.008   Could not find core in Coresight setup
-TAF0C 000:354.850 - 283.233ms returns 0x00000000
-TAF0C 000:358.544 JLINK_Close()
-TAF0C 000:371.113 - 12.617ms
-TAF0C 000:371.175   
-TAF0C 000:371.198   Closed
+T2004 000:006.029   SEGGER J-Link V6.98e Log File
+T2004 000:006.212   DLL Compiled: Mar 29 2021 14:18:39
+T2004 000:006.244   Logging started @ 2026-07-15 08:53
+T2004 000:006.279 - 6.297ms
+T2004 000:006.345 JLINK_SetWarnOutHandler(...)
+T2004 000:006.390 - 0.058ms
+T2004 000:006.417 JLINK_OpenEx(...)
+T2004 000:009.913   Firmware: J-Link V9 compiled May  7 2021 16:26:12
+T2004 000:010.424   Firmware: J-Link V9 compiled May  7 2021 16:26:12
+T2004 000:010.642   Decompressing FW timestamp took 134 us
+T2004 000:017.286   Hardware: V9.70
+T2004 000:017.362   S/N: 20781318
+T2004 000:017.397   OEM: SEGGER
+T2004 000:017.432   Feature(s): RDI, GDB, FlashBP, FlashDL, JFlash
+T2004 000:018.505   TELNET listener socket opened on port 19021
+T2004 000:018.658   WEBSRV Starting webserver
+T2004 000:018.877   WEBSRV Webserver running on local port 19080
+T2004 000:018.917 - 12.513ms returns "O.K."
+T2004 000:018.954 JLINK_GetEmuCaps()
+T2004 000:018.985 - 0.046ms returns 0xB9FF7BBF
+T2004 000:019.022 JLINK_TIF_GetAvailable(...)
+T2004 000:019.214 - 0.210ms
+T2004 000:019.256 JLINK_SetErrorOutHandler(...)
+T2004 000:019.285 - 0.042ms
+T2004 000:019.336 JLINK_ExecCommand("ProjectFile = "D:\TI\project\example\diansai\keil\JLinkSettings.ini"", ...). 
+T2004 000:038.642   Ref file found at: D:\app\Keil5 MDK\ARM\Segger\JLinkDevices.ref
+T2004 000:038.921   XML referenced by ref file: D:\app\Jlink\JLinkDevices.xml
+T2004 000:039.739   D:\app\Jlink\JLinkDevices.xml evaluated successfully.
+T2004 000:049.668   Device "CORTEX-M0+" selected.
+T2004 000:050.255 - 30.952ms returns 0x00
+T2004 000:053.918 JLINK_ExecCommand("Device = MSPM0G3507", ...). 
+T2004 000:056.714   Device "CORTEX-M0+" selected.
+T2004 000:057.295 - 3.344ms returns 0x00
+T2004 000:057.334 JLINK_GetHardwareVersion()
+T2004 000:057.358 - 0.035ms returns 97000
+T2004 000:057.385 JLINK_GetDLLVersion()
+T2004 000:057.410 - 0.037ms returns 69805
+T2004 000:057.436 JLINK_GetOEMString(...)
+T2004 000:057.472 JLINK_GetFirmwareString(...)
+T2004 000:057.498 - 0.037ms
+T2004 000:064.486 JLINK_GetDLLVersion()
+T2004 000:064.551 - 0.088ms returns 69805
+T2004 000:064.590 JLINK_GetCompileDateTime()
+T2004 000:064.619 - 0.041ms
+T2004 000:067.165 JLINK_GetFirmwareString(...)
+T2004 000:067.225 - 0.072ms
+T2004 000:070.033 JLINK_GetHardwareVersion()
+T2004 000:070.082 - 0.062ms returns 97000
+T2004 000:073.090 JLINK_GetSN()
+T2004 000:073.141 - 0.066ms returns 20781318
+T2004 000:075.382 JLINK_GetOEMString(...)
+T2004 000:079.578 JLINK_TIF_Select(JLINKARM_TIF_SWD)
+T2004 000:080.118 - 0.636ms returns 0x00
+T2004 000:080.234 JLINK_HasError()
+T2004 000:080.279 JLINK_SetSpeed(5000)
+T2004 000:080.411 - 0.203ms
+T2004 000:080.506 JLINK_GetId()
+T2004 000:901.947 - 821.489ms returns 0x00000000
+T2004 002:281.345 JLINK_Close()
+T2004 002:292.238 - 10.935ms
+T2004 002:292.296   
+T2004 002:292.322   Closed
