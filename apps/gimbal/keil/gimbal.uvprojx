@@ -7,7 +7,7 @@
 
   <Targets>
     <Target>
-      <TargetName>Target_1</TargetName>
+      <TargetName>gimbal</TargetName>
       <ToolsetNumber>0x4</ToolsetNumber>
       <ToolsetName>ARM-ADS</ToolsetName>
       <pCCUsed>6220000::V6.22::ARMCLANG</pCCUsed>
@@ -52,7 +52,7 @@
           <OutputName>template</OutputName>
           <CreateExecutable>1</CreateExecutable>
           <CreateLib>0</CreateLib>
-          <CreateHexFile>1</CreateHexFile>
+          <CreateHexFile>0</CreateHexFile>
           <DebugInformation>1</DebugInformation>
           <BrowseInformation>1</BrowseInformation>
           <ListingPath>.\Listings\</ListingPath>
@@ -371,7 +371,7 @@
             <TextAddressRange>0x00000000</TextAddressRange>
             <DataAddressRange>0x20000000</DataAddressRange>
             <pXoBase></pXoBase>
-            <ScatterFile>..\mspm0g3507.sct</ScatterFile>
+            <ScatterFile>.\mspm0g3507.sct</ScatterFile>
             <IncludeLibs></IncludeLibs>
             <IncludeLibsPath></IncludeLibsPath>
             <Misc></Misc>
@@ -380,7 +380,7 @@
           </LDads>
         </TargetArmAds>
       </TargetOption>
-      <Groups>
+            <Groups>
         <Group>
           <GroupName>Source</GroupName>
           <Files>
@@ -590,7 +590,7 @@
               <FilePath>..\src\main.c</FilePath>
             </File>
             <File>
-              <FileName>empty.syscfg</FileName>
+              <FileName>app.syscfg</FileName>
               <FileType>5</FileType>
               <FilePath>..\syscfg\app.syscfg</FilePath>
             </File>
@@ -610,24 +610,24 @@
           <GroupName>Function</GroupName>
           <Files>
             <File>
-              <FileName>board.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\src\Function\Inc\board.h</FilePath>
-            </File>
-            <File>
               <FileName>delay.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\src\Function\Src\delay.c</FilePath>
             </File>
             <File>
-              <FileName>delay.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\src\Function\Inc\delay.h</FilePath>
-            </File>
-            <File>
               <FileName>uart.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\src\Function\Src\uart.c</FilePath>
+            </File>
+            <File>
+              <FileName>board.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\src\Function\Inc\board.h</FilePath>
+            </File>
+            <File>
+              <FileName>delay.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\src\Function\Inc\delay.h</FilePath>
             </File>
             <File>
               <FileName>uart.h</FileName>

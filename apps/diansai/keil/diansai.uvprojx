@@ -7,7 +7,7 @@
 
   <Targets>
     <Target>
-      <TargetName>Target_1</TargetName>
+      <TargetName>diansai</TargetName>
       <ToolsetNumber>0x4</ToolsetNumber>
       <ToolsetName>ARM-ADS</ToolsetName>
       <pCCUsed>6220000::V6.22::ARMCLANG</pCCUsed>
@@ -49,10 +49,10 @@
             <InvalidFlash>1</InvalidFlash>
           </TargetStatus>
           <OutputDirectory>.\Objects\</OutputDirectory>
-          <OutputName>diansai</OutputName>
+          <OutputName>template</OutputName>
           <CreateExecutable>1</CreateExecutable>
           <CreateLib>0</CreateLib>
-          <CreateHexFile>1</CreateHexFile>
+          <CreateHexFile>0</CreateHexFile>
           <DebugInformation>1</DebugInformation>
           <BrowseInformation>1</BrowseInformation>
           <ListingPath>.\Listings\</ListingPath>
@@ -134,11 +134,11 @@
             <RunIndependent>0</RunIndependent>
             <UpdateFlashBeforeDebugging>1</UpdateFlashBeforeDebugging>
             <Capability>1</Capability>
-            <DriverSelection>-1</DriverSelection>
+            <DriverSelection>4096</DriverSelection>
           </Flash1>
           <bUseTDR>1</bUseTDR>
           <Flash2>BIN\UL2CM3.DLL</Flash2>
-          <Flash3></Flash3>
+          <Flash3>"" ()</Flash3>
           <Flash4></Flash4>
           <pFcarmOut></pFcarmOut>
           <pFcarmGrp></pFcarmGrp>
@@ -194,7 +194,7 @@
             <EndSel>0</EndSel>
             <uLtcg>0</uLtcg>
             <nSecure>0</nSecure>
-            <RoSelD>4</RoSelD>
+            <RoSelD>3</RoSelD>
             <RwSelD>4</RwSelD>
             <CodeSel>0</CodeSel>
             <OptFeed>0</OptFeed>
@@ -380,7 +380,7 @@
           </LDads>
         </TargetArmAds>
       </TargetOption>
-      <Groups>
+            <Groups>
         <Group>
           <GroupName>Source</GroupName>
           <Files>
@@ -572,6 +572,16 @@
           </Files>
         </Group>
         <Group>
+          <GroupName>Startup</GroupName>
+          <Files>
+            <File>
+              <FileName>startup_mspm0g350x_uvision.s</FileName>
+              <FileType>2</FileType>
+              <FilePath>.\startup_mspm0g350x_uvision.s</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
           <GroupName>User</GroupName>
           <Files>
             <File>
@@ -580,7 +590,7 @@
               <FilePath>..\src\main.c</FilePath>
             </File>
             <File>
-              <FileName>empty.syscfg</FileName>
+              <FileName>app.syscfg</FileName>
               <FileType>5</FileType>
               <FilePath>..\syscfg\app.syscfg</FilePath>
             </File>
@@ -597,18 +607,18 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Startup</GroupName>
-          <Files>
-            <File>
-              <FileName>startup_mspm0g350x_uvision.s</FileName>
-              <FileType>2</FileType>
-              <FilePath>.\startup_mspm0g350x_uvision.s</FilePath>
-            </File>
-          </Files>
-        </Group>
-        <Group>
           <GroupName>Function</GroupName>
           <Files>
+            <File>
+              <FileName>bsp_iic.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\src\Function\Src\bsp_iic.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_systick.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\src\Function\Src\bsp_systick.c</FilePath>
+            </File>
             <File>
               <FileName>board.h</FileName>
               <FileType>5</FileType>
@@ -624,30 +634,25 @@
               <FileType>5</FileType>
               <FilePath>..\src\Function\Inc\bsp_systick.h</FilePath>
             </File>
-            <File>
-              <FileName>bsp_iic.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\src\Function\Src\bsp_iic.c</FilePath>
-            </File>
-            <File>
-              <FileName>bsp_systick.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\src\Function\Src\bsp_systick.c</FilePath>
-            </File>
           </Files>
         </Group>
         <Group>
           <GroupName>Hardware</GroupName>
           <Files>
             <File>
+              <FileName>encoder.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\src\Hardware\Src\encoder.c</FilePath>
+            </File>
+            <File>
               <FileName>grayscale_sensor.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\src\Hardware\Src\grayscale_sensor.c</FilePath>
             </File>
             <File>
-              <FileName>grayscale_sensor.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\src\Hardware\Inc\grayscale_sensor.h</FilePath>
+              <FileName>imu601.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\src\Hardware\Src\imu601.c</FilePath>
             </File>
             <File>
               <FileName>motor.c</FileName>
@@ -655,14 +660,34 @@
               <FilePath>..\src\Hardware\Src\motor.c</FilePath>
             </File>
             <File>
-              <FileName>motor.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\src\Hardware\Inc\motor.h</FilePath>
-            </File>
-            <File>
               <FileName>OLED.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\src\Hardware\Src\OLED.c</FilePath>
+            </File>
+            <File>
+              <FileName>step_motor.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\src\Hardware\Src\step_motor.c</FilePath>
+            </File>
+            <File>
+              <FileName>encoder.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\src\Hardware\Inc\encoder.h</FilePath>
+            </File>
+            <File>
+              <FileName>grayscale_sensor.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\src\Hardware\Inc\grayscale_sensor.h</FilePath>
+            </File>
+            <File>
+              <FileName>imu601.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\src\Hardware\Inc\imu601.h</FilePath>
+            </File>
+            <File>
+              <FileName>motor.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\src\Hardware\Inc\motor.h</FilePath>
             </File>
             <File>
               <FileName>OLED.h</FileName>
@@ -675,34 +700,9 @@
               <FilePath>..\src\Hardware\Inc\OLED_Font.h</FilePath>
             </File>
             <File>
-              <FileName>encoder.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\src\Hardware\Src\encoder.c</FilePath>
-            </File>
-            <File>
-              <FileName>encoder.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\src\Hardware\Inc\encoder.h</FilePath>
-            </File>
-            <File>
-              <FileName>step_motor.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\src\Hardware\Src\step_motor.c</FilePath>
-            </File>
-            <File>
               <FileName>step_motor.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\src\Hardware\Inc\step_motor.h</FilePath>
-            </File>
-            <File>
-              <FileName>imu601.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\src\Hardware\Src\imu601.c</FilePath>
-            </File>
-            <File>
-              <FileName>imu601.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\src\Hardware\Inc\imu601.h</FilePath>
             </File>
           </Files>
         </Group>
@@ -719,7 +719,7 @@
   <LayerInfo>
     <Layers>
       <Layer>
-        <LayName>diansai</LayName>
+        <LayName>template</LayName>
         <LayPrjMark>1</LayPrjMark>
       </Layer>
     </Layers>
