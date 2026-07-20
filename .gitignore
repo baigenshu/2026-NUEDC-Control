@@ -1,35 +1,40 @@
-# Keil 输出文件
+# Build outputs
+build/
+**/build/
 *.o
 *.d
-*.crf
-*.htm
-*.lnp
-*.axf
-*.sct
+*.out
+*.hex
 *.map
-*.lst
-*.dep
-*.bak
-*.backup
+*.elf
+*.bin
 
-# Keil 工程临时文件
-*.uvguix*
-*.uvoptx
-*.scvd
+# Local tool path cache (re-generate via MSPM0 Toolkit 同步配置)
+toolpaths.mk
+**/toolpaths.mk
 
-# SysConfig 生成的文件（根据需要选择）
-# ti_msp_dl_config.c
-# ti_msp_dl_config.h
-
-# 编译输出目录
-Build/
-Output/
-Listings/
-Objects/
-.claude/
+# VS Code generated / machine-local (extension regenerates)
 .vscode/
-.tmp/
+**/.vscode/
 
-# 其他
-*.log
+# Keil legacy leftovers
+**/keil/Objects/
+**/keil/Listings/
+**/keil/*.uvguix*
+**/keil/*.uvoptx
+**/keil/JLinkLog.txt
+*.crf
+*.axf
+*.lnp
+*.bak
+
+# Python
+__pycache__/
+*.pyc
+
+# OS / editor
 .DS_Store
+Thumbs.db
+*.log
+.tmp/
+.claude/

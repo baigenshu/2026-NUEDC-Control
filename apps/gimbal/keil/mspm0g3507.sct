@@ -1,0 +1,12 @@
+; MSPM0G3507 scatter (Keil)
+LR_IROM1 0x00000000 0x00020000  {
+  ER_IROM1 0x00000000 0x00020000  {
+   *.o (RESET, +First)
+   *(InRoot$$Sections)
+   .ANY (+RO)
+   .ANY (+XO)
+  }
+  RW_IRAM1 0x20200000 0x00008000  {
+   .ANY (+RW +ZI)
+  }
+}
