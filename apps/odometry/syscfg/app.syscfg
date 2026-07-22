@@ -1,0 +1,134 @@
+/**
+ * Odometry MCU — MSPM0G3507 LQFP-64(PM)
+ * @cliArgs --device "MSPM0G350X" --part "Default" --package "LQFP-64(PM)" --product "mspm0_sdk@2.05.01.00"
+ * @v2CliArgs --device "MSPM0G3507" --package "LQFP-64(PM)" --product "mspm0_sdk@2.05.01.00"
+ * @versions {"tool":"1.24.1+4189"}
+ *
+ * NOTE: G3507 only has ONE QEI-capable timer (TIMG8). TIMG7/6/0/12 cannot run QEI
+ * in SysConfig / silicon. Dual wheel = QEI_A (hw) + ENC_B (GPIO IRQ).
+ *
+ * Pin map:
+ *   UART0 DEBUG  PA10 TX / PA11 RX  115200
+ *   UART1 IMU601 PA8  TX / PA9  RX  115200 + DMA_CH0 RX
+ *   QEI_A TIMG8  PB6  PHA / PB7  PHB   (hardware QEI)
+ *   ENC_B GPIO   PB0  / PB5             (GPIO both-edge; diansai-compatible)
+ *   TIMER TIMG0  10 ms (100 Hz)
+ */
+
+/**
+ * Import the modules used in this configuration.
+ */
+const GPIO    = scripting.addModule("/ti/driverlib/GPIO", {}, false);
+const GPIO1   = GPIO.addInstance();
+const QEI     = scripting.addModule("/ti/driverlib/QEI", {}, false);
+const QEI1    = QEI.addInstance();
+const SYSCTL  = scripting.addModule("/ti/driverlib/SYSCTL");
+const SYSTICK = scripting.addModule("/ti/driverlib/SYSTICK");
+const TIMER   = scripting.addModule("/ti/driverlib/TIMER", {}, false);
+const TIMER1  = TIMER.addInstance();
+const UART    = scripting.addModule("/ti/driverlib/UART", {}, false);
+const UART1   = UART.addInstance();
+const UART2   = UART.addInstance();
+
+/**
+ * Write custom configuration values to the imported modules.
+ */
+const divider7       = system.clockTree["PLL_PDIV"];
+divider7.divideValue = 2;
+
+const divider9       = system.clockTree["UDIV"];
+divider9.divideValue = 2;
+
+const multiplier2         = system.clockTree["PLL_QDIV"];
+multiplier2.multiplyValue = 5;
+
+const mux8       = system.clockTree["HSCLKMUX"];
+mux8.inputSelect = "HSCLKMUX_SYSPLL2X";
+
+const Board                       = scripting.addModule("/ti/driverlib/Board", {}, false);
+Board.peripheral.$assign          = "DEBUGSS";
+Board.peripheral.swclkPin.$assign = "PA20";
+Board.peripheral.swdioPin.$assign = "PA19";
+
+/* ---- Encoder B: GPIO both-edge (PB0/PB5, same as old diansai EncA pins) ---- */
+GPIO1.$name                              = "GPIO_ENCODERB";
+GPIO1.port                               = "PORTB";
+GPIO1.associatedPins.create(2);
+GPIO1.associatedPins[0].$name            = "E2A";
+GPIO1.associatedPins[0].direction        = "INPUT";
+GPIO1.associatedPins[0].internalResistor = "PULL_UP";
+GPIO1.associatedPins[0].interruptEn      = true;
+GPIO1.associatedPins[0].polarity         = "RISE_FALL";
+GPIO1.associatedPins[0].assignedPin      = "0";
+GPIO1.associatedPins[0].pin.$assign      = "PB0";
+GPIO1.associatedPins[1].$name            = "E2B";
+GPIO1.associatedPins[1].direction        = "INPUT";
+GPIO1.associatedPins[1].internalResistor = "PULL_UP";
+GPIO1.associatedPins[1].interruptEn      = true;
+GPIO1.associatedPins[1].polarity         = "RISE_FALL";
+GPIO1.associatedPins[1].assignedPin      = "5";
+GPIO1.associatedPins[1].pin.$assign      = "PB5";
+
+/* ---- QEI_A: only TIMG8 is QEI-capable on G3507 ---- */
+QEI1.$name                      = "QEI_A";
+QEI1.peripheral.$assign         = "TIMG8";
+QEI1.peripheral.ccp0Pin.$assign = "PB6";
+QEI1.peripheral.ccp1Pin.$assign = "PB7";
+
+SYSCTL.forceDefaultClkConfig = true;
+SYSCTL.clockTreeEn           = true;
+scripting.suppress("For best practices when the CPUCLK is running at 32MHz and above, clear the flash status bit using DL_FlashCTL_executeClearStatus\\(\\) before executing any flash operation\\. Otherwise there may be false positives\\.", SYSCTL);
+
+SYSTICK.periodEnable  = true;
+SYSTICK.systickEnable = true;
+SYSTICK.period        = 16777216;
+
+TIMER1.$name               = "ODOM_TIM";
+TIMER1.timerMode           = "PERIODIC";
+TIMER1.timerClkPrescale    = 40;
+TIMER1.timerPeriod         = "10 ms";
+TIMER1.interrupts          = ["ZERO"];
+TIMER1.timerStartTimer     = true;
+TIMER1.peripheral.$assign  = "TIMG0";
+
+UART1.$name                            = "DEBUG_UART";
+UART1.targetBaudRate                   = 115200;
+UART1.peripheral.$assign               = "UART0";
+UART1.peripheral.rxPin.$assign         = "PA11";
+UART1.peripheral.txPin.$assign         = "PA10";
+UART1.txPinConfig.direction            = scripting.forceWrite("OUTPUT");
+UART1.txPinConfig.hideOutputInversion  = scripting.forceWrite(false);
+UART1.txPinConfig.onlyInternalResistor = scripting.forceWrite(false);
+UART1.txPinConfig.passedPeripheralType = scripting.forceWrite("Digital");
+UART1.txPinConfig.$name                = "ti_driverlib_gpio_GPIOPinGeneric_dbg_tx";
+UART1.rxPinConfig.hideOutputInversion  = scripting.forceWrite(false);
+UART1.rxPinConfig.onlyInternalResistor = scripting.forceWrite(false);
+UART1.rxPinConfig.passedPeripheralType = scripting.forceWrite("Digital");
+UART1.rxPinConfig.$name                = "ti_driverlib_gpio_GPIOPinGeneric_dbg_rx";
+
+UART2.$name                             = "IMU601";
+UART2.targetBaudRate                    = 115200;
+UART2.enableFIFO                        = true;
+UART2.enabledInterrupts                 = ["DMA_DONE_RX"];
+UART2.enabledDMARXTriggers              = "DL_UART_DMA_INTERRUPT_RX";
+UART2.enableDMARX                       = true;
+UART2.peripheral.$assign                = "UART1";
+UART2.peripheral.rxPin.$assign          = "PA9";
+UART2.peripheral.txPin.$assign          = "PA8";
+UART2.txPinConfig.direction             = scripting.forceWrite("OUTPUT");
+UART2.txPinConfig.hideOutputInversion   = scripting.forceWrite(false);
+UART2.txPinConfig.onlyInternalResistor  = scripting.forceWrite(false);
+UART2.txPinConfig.passedPeripheralType  = scripting.forceWrite("Digital");
+UART2.txPinConfig.$name                 = "ti_driverlib_gpio_GPIOPinGeneric_imu_tx";
+UART2.rxPinConfig.hideOutputInversion   = scripting.forceWrite(false);
+UART2.rxPinConfig.onlyInternalResistor  = scripting.forceWrite(false);
+UART2.rxPinConfig.passedPeripheralType  = scripting.forceWrite("Digital");
+UART2.rxPinConfig.$name                 = "ti_driverlib_gpio_GPIOPinGeneric_imu_rx";
+UART2.DMA_CHANNEL_RX.peripheral.$assign = "DMA_CH0";
+UART2.DMA_CHANNEL_RX.addressMode        = "f2b";
+UART2.DMA_CHANNEL_RX.dstIncDec          = "INCREMENT";
+UART2.DMA_CHANNEL_RX.dstLength          = "BYTE";
+UART2.DMA_CHANNEL_RX.srcLength          = "BYTE";
+
+const ProjectConfig              = scripting.addModule("/ti/project_config/ProjectConfig", {}, false);
+ProjectConfig.migrationCondition = true;

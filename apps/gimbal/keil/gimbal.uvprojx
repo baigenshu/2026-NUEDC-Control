@@ -380,7 +380,7 @@
           </LDads>
         </TargetArmAds>
       </TargetOption>
-            <Groups>
+      <Groups>
         <Group>
           <GroupName>Source</GroupName>
           <Files>
@@ -620,6 +620,11 @@
               <FilePath>..\src\Function\Src\uart.c</FilePath>
             </File>
             <File>
+              <FileName>track_proto.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\src\Function\Src\track_proto.c</FilePath>
+            </File>
+            <File>
               <FileName>board.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\src\Function\Inc\board.h</FilePath>
@@ -633,6 +638,11 @@
               <FileName>uart.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\src\Function\Inc\uart.h</FilePath>
+            </File>
+            <File>
+              <FileName>track_proto.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\src\Function\Inc\track_proto.h</FilePath>
             </File>
           </Files>
         </Group>
@@ -648,6 +658,16 @@
               <FileName>step_motor.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\src\Hardware\step_motor.h</FilePath>
+            </File>
+            <File>
+              <FileName>track_control.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\src\Hardware\track_control.c</FilePath>
+            </File>
+            <File>
+              <FileName>track_control.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\src\Hardware\track_control.h</FilePath>
             </File>
           </Files>
         </Group>

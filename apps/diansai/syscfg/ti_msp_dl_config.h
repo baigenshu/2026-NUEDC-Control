@@ -102,30 +102,6 @@ extern "C" {
 #define GPIO_PWMB_C0_IOMUX_FUNC                      IOMUX_PINCM46_PF_TIMG6_CCP0
 #define GPIO_PWMB_C0_IDX                                     DL_TIMER_CC_0_INDEX
 
-/* Defines for STEPPER2_PWM */
-#define STEPPER2_PWM_INST                                                  TIMA1
-#define STEPPER2_PWM_INST_IRQHandler                            TIMA1_IRQHandler
-#define STEPPER2_PWM_INST_INT_IRQN                              (TIMA1_INT_IRQn)
-#define STEPPER2_PWM_INST_CLK_FREQ                                      80000000
-/* GPIO defines for channel 0 */
-#define GPIO_STEPPER2_PWM_C0_PORT                                          GPIOA
-#define GPIO_STEPPER2_PWM_C0_PIN                                  DL_GPIO_PIN_10
-#define GPIO_STEPPER2_PWM_C0_IOMUX                               (IOMUX_PINCM21)
-#define GPIO_STEPPER2_PWM_C0_IOMUX_FUNC              IOMUX_PINCM21_PF_TIMA1_CCP0
-#define GPIO_STEPPER2_PWM_C0_IDX                             DL_TIMER_CC_0_INDEX
-
-/* Defines for STEPPER1_PWM */
-#define STEPPER1_PWM_INST                                                  TIMA0
-#define STEPPER1_PWM_INST_IRQHandler                            TIMA0_IRQHandler
-#define STEPPER1_PWM_INST_INT_IRQN                              (TIMA0_INT_IRQn)
-#define STEPPER1_PWM_INST_CLK_FREQ                                      80000000
-/* GPIO defines for channel 0 */
-#define GPIO_STEPPER1_PWM_C0_PORT                                          GPIOA
-#define GPIO_STEPPER1_PWM_C0_PIN                                   DL_GPIO_PIN_0
-#define GPIO_STEPPER1_PWM_C0_IOMUX                                (IOMUX_PINCM1)
-#define GPIO_STEPPER1_PWM_C0_IOMUX_FUNC               IOMUX_PINCM1_PF_TIMA0_CCP0
-#define GPIO_STEPPER1_PWM_C0_IDX                             DL_TIMER_CC_0_INDEX
-
 
 
 
@@ -272,36 +248,6 @@ extern "C" {
 #define GPIO_ENCODERB_E2B_IIDX                              (DL_GPIO_IIDX_DIO18)
 #define GPIO_ENCODERB_E2B_PIN                                   (DL_GPIO_PIN_18)
 #define GPIO_ENCODERB_E2B_IOMUX                                  (IOMUX_PINCM44)
-/* Port definition for Pin Group STEPPER1 */
-#define STEPPER1_PORT                                                    (GPIOA)
-
-/* Defines for DIR1: GPIOA.6 with pinCMx 11 on package pin 46 */
-#define STEPPER1_DIR1_PIN                                        (DL_GPIO_PIN_6)
-#define STEPPER1_DIR1_IOMUX                                      (IOMUX_PINCM11)
-/* Defines for DCY1: GPIOA.7 with pinCMx 14 on package pin 49 */
-#define STEPPER1_DCY1_PIN                                        (DL_GPIO_PIN_7)
-#define STEPPER1_DCY1_IOMUX                                      (IOMUX_PINCM14)
-/* Defines for SLP1: GPIOA.13 with pinCMx 35 on package pin 6 */
-#define STEPPER1_SLP1_PIN                                       (DL_GPIO_PIN_13)
-#define STEPPER1_SLP1_IOMUX                                      (IOMUX_PINCM35)
-/* Defines for RST1: GPIOA.15 with pinCMx 37 on package pin 8 */
-#define STEPPER1_RST1_PIN                                       (DL_GPIO_PIN_15)
-#define STEPPER1_RST1_IOMUX                                      (IOMUX_PINCM37)
-/* Port definition for Pin Group STEPPER2 */
-#define STEPPER2_PORT                                                    (GPIOA)
-
-/* Defines for DIR2: GPIOA.23 with pinCMx 53 on package pin 24 */
-#define STEPPER2_DIR2_PIN                                       (DL_GPIO_PIN_23)
-#define STEPPER2_DIR2_IOMUX                                      (IOMUX_PINCM53)
-/* Defines for DCY2: GPIOA.24 with pinCMx 54 on package pin 25 */
-#define STEPPER2_DCY2_PIN                                       (DL_GPIO_PIN_24)
-#define STEPPER2_DCY2_IOMUX                                      (IOMUX_PINCM54)
-/* Defines for SLP2: GPIOA.26 with pinCMx 59 on package pin 30 */
-#define STEPPER2_SLP2_PIN                                       (DL_GPIO_PIN_26)
-#define STEPPER2_SLP2_IOMUX                                      (IOMUX_PINCM59)
-/* Defines for RST2: GPIOA.28 with pinCMx 3 on package pin 35 */
-#define STEPPER2_RST2_PIN                                       (DL_GPIO_PIN_28)
-#define STEPPER2_RST2_IOMUX                                       (IOMUX_PINCM3)
 
 
 
@@ -313,8 +259,6 @@ void SYSCFG_DL_GPIO_init(void);
 void SYSCFG_DL_SYSCTL_init(void);
 void SYSCFG_DL_PWMA_init(void);
 void SYSCFG_DL_PWMB_init(void);
-void SYSCFG_DL_STEPPER2_PWM_init(void);
-void SYSCFG_DL_STEPPER1_PWM_init(void);
 void SYSCFG_DL_I2C_init(void);
 void SYSCFG_DL_IMU601_init(void);
 void SYSCFG_DL_SPI_OLED_init(void);

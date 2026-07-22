@@ -5,6 +5,10 @@ TARGET   ?= app
 BUILD    := build
 PROBE    := jlink
 
+# MinGW make defaults to sh; force cmd for Windows recipes (if not exist / rmdir)
+SHELL := cmd.exe
+.SHELLFLAGS := /c
+
 -include toolpaths.mk
 
 # Optional project overlay (not overwritten by the extension):
@@ -26,6 +30,11 @@ $(error GCC_PATH is empty. Set mspm0.gccPath in VS Code (extension injects it) o
 endif
 ifeq ($(strip $(SDK)),)
 $(error SDK is empty. Set mspm0.sdkPath or create toolpaths.mk via 同步配置)
+endif
+
+# cmd.exe + make cannot invoke tools under paths with spaces (e.g. "GNU Toolchain ...")
+ifneq ($(words $(GCC_PATH)),1)
+  override GCC_PATH := D:/Arm/gcc-arm
 endif
 
 SYSCONFIG_CLI := $(SYSCONFIG_ROOT)/sysconfig_cli.bat
@@ -54,13 +63,13 @@ CFLAGS   := $(CPUFLAGS) -std=c99 -O2 -g -gstrict-dwarf -Wall \
             -I. -Isrc -Isyscfg \
             $(addprefix -I,$(SRC_INCDIRS)) \
             $(EXTRA_INCLUDES) \
-            -I$(SDK)/source \
-            -I$(SDK)/source/third_party/CMSIS/Core/Include \
-            -I$(GCC_PATH)/arm-none-eabi/include
+            -I"$(SDK)/source" \
+            -I"$(SDK)/source/third_party/CMSIS/Core/Include" \
+            -I"$(GCC_PATH)/arm-none-eabi/include"
 
 LDFLAGS  := $(CPUFLAGS) -nostartfiles -static -Wl,--gc-sections \
             -Wl,-Map,$(BUILD)/$(TARGET).map \
-            -L$(SDK)/source \
+            -L"$(SDK)/source" \
             -Wl,-T,linker/device.lds.genlibs \
             -Tlinker/device.lds \
             --specs=nano.specs --specs=nosys.specs \
@@ -76,22 +85,22 @@ all: $(BUILD)/$(TARGET).out $(BUILD)/$(TARGET).hex size
 
 $(BUILD)/$(TARGET).out: $(OBJS) linker/device.lds
 	@echo Linking $@
-	@$(CC) $(OBJS) $(LDFLAGS) -o $@
+	@"$(CC)" $(OBJS) $(LDFLAGS) -o $@
 
 $(BUILD)/$(TARGET).hex: $(BUILD)/$(TARGET).out
-	@$(OBJCOPY) -O ihex $< $@
+	@"$(OBJCOPY)" -O ihex $< $@
 
 $(BUILD)/%.o: %.c
 	@if not exist $(subst /,\\,$(dir $@)) mkdir $(subst /,\\,$(dir $@))
 	@echo CC $<
-	@$(CC) $(CFLAGS) -c $< -o $@
+	@"$(CC)" $(CFLAGS) -c $< -o $@
 
 size: $(BUILD)/$(TARGET).out
-	@$(SIZE) $<
+	@"$(SIZE)" $<
 
 syscfg:
 	@echo Generating SysConfig files...
-	@$(SYSCONFIG_CLI) --compiler gcc --product $(SDK)/.metadata/product.json --output syscfg syscfg/app.syscfg
+	@"$(SYSCONFIG_CLI)" --compiler gcc --product "$(SDK)/.metadata/product.json" --output syscfg syscfg/app.syscfg
 
 syscfg-gui:
 	@echo Opening SysConfig GUI...

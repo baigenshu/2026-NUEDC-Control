@@ -665,11 +665,6 @@
               <FilePath>..\src\Hardware\Src\OLED.c</FilePath>
             </File>
             <File>
-              <FileName>step_motor.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\src\Hardware\Src\step_motor.c</FilePath>
-            </File>
-            <File>
               <FileName>encoder.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\src\Hardware\Inc\encoder.h</FilePath>
@@ -698,11 +693,6 @@
               <FileName>OLED_Font.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\src\Hardware\Inc\OLED_Font.h</FilePath>
-            </File>
-            <File>
-              <FileName>step_motor.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\src\Hardware\Inc\step_motor.h</FilePath>
             </File>
           </Files>
         </Group>

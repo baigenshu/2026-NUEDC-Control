@@ -1,0 +1,14 @@
+﻿id: red_track
+name: Red Track
+name[zh]: 红色跟踪
+version: 1.0.1
+author: maxicam_test
+desc: Red blob tracking + IMU over UART to gimbal
+desc[zh]: 红目标检测 + IMU，经 UART 发给云台主控
+exclude:
+  - .vscode
+  - dist
+  - __pycache__
+files:
+  - app.yaml
+  - main.py

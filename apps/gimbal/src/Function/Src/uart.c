@@ -1,4 +1,5 @@
 #include "uart.h"
+#include "track_proto.h"
 
 void UART_send_char(UART_Regs *uart, const uint8_t chr)
 {
@@ -13,13 +14,13 @@ void UART_send_string(UART_Regs *uart, const char *str)
     }
 }
 
-/* PRINT = UART0：RX 回显 */
+/* PRINT = UART0：MaixCAM 链路，RX 喂跟踪协议（不要回显二进制） */
 void PRINT_INST_IRQHandler(void)
 {
     switch (DL_UART_getPendingInterrupt(PRINT_INST)) {
     case DL_UART_IIDX_RX: {
         uint8_t rec = DL_UART_receiveData(PRINT_INST);
-        UART_send_char(PRINT_INST, rec);
+        track_proto_on_byte(rec);
         break;
     }
     default:
@@ -27,7 +28,7 @@ void PRINT_INST_IRQHandler(void)
     }
 }
 
-/* DEBUG = UART1：RX 回显（与 PRINT 相同行为） */
+/* DEBUG = UART1：调试口，RX 回显 */
 void DEBUG_INST_IRQHandler(void)
 {
     switch (DL_UART_getPendingInterrupt(DEBUG_INST)) {

@@ -41,8 +41,6 @@
 #include "ti_msp_dl_config.h"
 
 DL_TimerG_backupConfig gPWMBBackup;
-DL_TimerA_backupConfig gSTEPPER2_PWMBackup;
-DL_TimerA_backupConfig gSTEPPER1_PWMBackup;
 DL_SPI_backupConfig gSPI_OLEDBackup;
 
 /*
@@ -57,16 +55,12 @@ SYSCONFIG_WEAK void SYSCFG_DL_init(void)
     SYSCFG_DL_SYSCTL_init();
     SYSCFG_DL_PWMA_init();
     SYSCFG_DL_PWMB_init();
-    SYSCFG_DL_STEPPER2_PWM_init();
-    SYSCFG_DL_STEPPER1_PWM_init();
     SYSCFG_DL_I2C_init();
     SYSCFG_DL_IMU601_init();
     SYSCFG_DL_SPI_OLED_init();
     SYSCFG_DL_SYSTICK_init();
     /* Ensure backup structures have no valid state */
 	gPWMBBackup.backupRdy 	= false;
-	gSTEPPER2_PWMBackup.backupRdy 	= false;
-	gSTEPPER1_PWMBackup.backupRdy 	= false;
 
 	gSPI_OLEDBackup.backupRdy 	= false;
 
@@ -80,8 +74,6 @@ SYSCONFIG_WEAK bool SYSCFG_DL_saveConfiguration(void)
     bool retStatus = true;
 
 	retStatus &= DL_TimerG_saveConfiguration(PWMB_INST, &gPWMBBackup);
-	retStatus &= DL_TimerA_saveConfiguration(STEPPER2_PWM_INST, &gSTEPPER2_PWMBackup);
-	retStatus &= DL_TimerA_saveConfiguration(STEPPER1_PWM_INST, &gSTEPPER1_PWMBackup);
 	retStatus &= DL_SPI_saveConfiguration(SPI_OLED_INST, &gSPI_OLEDBackup);
 
     return retStatus;
@@ -93,8 +85,6 @@ SYSCONFIG_WEAK bool SYSCFG_DL_restoreConfiguration(void)
     bool retStatus = true;
 
 	retStatus &= DL_TimerG_restoreConfiguration(PWMB_INST, &gPWMBBackup, false);
-	retStatus &= DL_TimerA_restoreConfiguration(STEPPER2_PWM_INST, &gSTEPPER2_PWMBackup, false);
-	retStatus &= DL_TimerA_restoreConfiguration(STEPPER1_PWM_INST, &gSTEPPER1_PWMBackup, false);
 	retStatus &= DL_SPI_restoreConfiguration(SPI_OLED_INST, &gSPI_OLEDBackup);
 
     return retStatus;
@@ -106,8 +96,6 @@ SYSCONFIG_WEAK void SYSCFG_DL_initPower(void)
     DL_GPIO_reset(GPIOB);
     DL_TimerG_reset(PWMA_INST);
     DL_TimerG_reset(PWMB_INST);
-    DL_TimerA_reset(STEPPER2_PWM_INST);
-    DL_TimerA_reset(STEPPER1_PWM_INST);
     DL_I2C_reset(I2C_INST);
     DL_UART_Main_reset(IMU601_INST);
     DL_SPI_reset(SPI_OLED_INST);
@@ -117,8 +105,6 @@ SYSCONFIG_WEAK void SYSCFG_DL_initPower(void)
     DL_GPIO_enablePower(GPIOB);
     DL_TimerG_enablePower(PWMA_INST);
     DL_TimerG_enablePower(PWMB_INST);
-    DL_TimerA_enablePower(STEPPER2_PWM_INST);
-    DL_TimerA_enablePower(STEPPER1_PWM_INST);
     DL_I2C_enablePower(I2C_INST);
     DL_UART_Main_enablePower(IMU601_INST);
     DL_SPI_enablePower(SPI_OLED_INST);
@@ -133,10 +119,6 @@ SYSCONFIG_WEAK void SYSCFG_DL_GPIO_init(void)
     DL_GPIO_enableOutput(GPIO_PWMA_C0_PORT, GPIO_PWMA_C0_PIN);
     DL_GPIO_initPeripheralOutputFunction(GPIO_PWMB_C0_IOMUX,GPIO_PWMB_C0_IOMUX_FUNC);
     DL_GPIO_enableOutput(GPIO_PWMB_C0_PORT, GPIO_PWMB_C0_PIN);
-    DL_GPIO_initPeripheralOutputFunction(GPIO_STEPPER2_PWM_C0_IOMUX,GPIO_STEPPER2_PWM_C0_IOMUX_FUNC);
-    DL_GPIO_enableOutput(GPIO_STEPPER2_PWM_C0_PORT, GPIO_STEPPER2_PWM_C0_PIN);
-    DL_GPIO_initPeripheralOutputFunction(GPIO_STEPPER1_PWM_C0_IOMUX,GPIO_STEPPER1_PWM_C0_IOMUX_FUNC);
-    DL_GPIO_enableOutput(GPIO_STEPPER1_PWM_C0_PORT, GPIO_STEPPER1_PWM_C0_PIN);
 
     
 	DL_GPIO_initPeripheralInputFunctionFeatures(
@@ -226,38 +208,6 @@ SYSCONFIG_WEAK void SYSCFG_DL_GPIO_init(void)
 		 DL_GPIO_INVERSION_DISABLE, DL_GPIO_RESISTOR_PULL_UP,
 		 DL_GPIO_HYSTERESIS_DISABLE, DL_GPIO_WAKEUP_DISABLE);
 
-    DL_GPIO_initDigitalOutput(STEPPER1_DIR1_IOMUX);
-
-    DL_GPIO_initDigitalOutput(STEPPER1_DCY1_IOMUX);
-
-    DL_GPIO_initDigitalOutput(STEPPER1_SLP1_IOMUX);
-
-    DL_GPIO_initDigitalOutput(STEPPER1_RST1_IOMUX);
-
-    DL_GPIO_initDigitalOutput(STEPPER2_DIR2_IOMUX);
-
-    DL_GPIO_initDigitalOutput(STEPPER2_DCY2_IOMUX);
-
-    DL_GPIO_initDigitalOutput(STEPPER2_SLP2_IOMUX);
-
-    DL_GPIO_initDigitalOutput(STEPPER2_RST2_IOMUX);
-
-    DL_GPIO_clearPins(GPIOA, STEPPER1_DIR1_PIN |
-		STEPPER2_DIR2_PIN);
-    DL_GPIO_setPins(GPIOA, STEPPER1_DCY1_PIN |
-		STEPPER1_SLP1_PIN |
-		STEPPER1_RST1_PIN |
-		STEPPER2_DCY2_PIN |
-		STEPPER2_SLP2_PIN |
-		STEPPER2_RST2_PIN);
-    DL_GPIO_enableOutput(GPIOA, STEPPER1_DIR1_PIN |
-		STEPPER1_DCY1_PIN |
-		STEPPER1_SLP1_PIN |
-		STEPPER1_RST1_PIN |
-		STEPPER2_DIR2_PIN |
-		STEPPER2_DCY2_PIN |
-		STEPPER2_SLP2_PIN |
-		STEPPER2_RST2_PIN);
     DL_GPIO_clearPins(GPIOB, GPIO_MOTOR_AIN1_PIN |
 		GPIO_MOTOR_AIN2_PIN |
 		GPIO_MOTOR_BIN1_PIN |
@@ -407,94 +357,6 @@ SYSCONFIG_WEAK void SYSCFG_DL_PWMB_init(void) {
 
     
     DL_TimerG_setCCPDirection(PWMB_INST , DL_TIMER_CC0_OUTPUT );
-
-
-}
-/*
- * Timer clock configuration to be sourced by  / 1 (80000000 Hz)
- * timerClkFreq = (timerClkSrc / (timerClkDivRatio * (timerClkPrescale + 1)))
- *   80000000 Hz = 80000000 Hz / (1 * (0 + 1))
- */
-static const DL_TimerA_ClockConfig gSTEPPER2_PWMClockConfig = {
-    .clockSel = DL_TIMER_CLOCK_BUSCLK,
-    .divideRatio = DL_TIMER_CLOCK_DIVIDE_1,
-    .prescale = 0U
-};
-
-static const DL_TimerA_PWMConfig gSTEPPER2_PWMConfig = {
-    .pwmMode = DL_TIMER_PWM_MODE_EDGE_ALIGN,
-    .period = 800,
-    .isTimerWithFourCC = true,
-    .startTimer = DL_TIMER_STOP,
-};
-
-SYSCONFIG_WEAK void SYSCFG_DL_STEPPER2_PWM_init(void) {
-
-    DL_TimerA_setClockConfig(
-        STEPPER2_PWM_INST, (DL_TimerA_ClockConfig *) &gSTEPPER2_PWMClockConfig);
-
-    DL_TimerA_initPWMMode(
-        STEPPER2_PWM_INST, (DL_TimerA_PWMConfig *) &gSTEPPER2_PWMConfig);
-
-    // Set Counter control to the smallest CC index being used
-    DL_TimerA_setCounterControl(STEPPER2_PWM_INST,DL_TIMER_CZC_CCCTL0_ZCOND,DL_TIMER_CAC_CCCTL0_ACOND,DL_TIMER_CLC_CCCTL0_LCOND);
-
-    DL_TimerA_setCaptureCompareOutCtl(STEPPER2_PWM_INST, DL_TIMER_CC_OCTL_INIT_VAL_LOW,
-		DL_TIMER_CC_OCTL_INV_OUT_DISABLED, DL_TIMER_CC_OCTL_SRC_FUNCVAL,
-		DL_TIMERA_CAPTURE_COMPARE_0_INDEX);
-
-    DL_TimerA_setCaptCompUpdateMethod(STEPPER2_PWM_INST, DL_TIMER_CC_UPDATE_METHOD_IMMEDIATE, DL_TIMERA_CAPTURE_COMPARE_0_INDEX);
-    DL_TimerA_setCaptureCompareValue(STEPPER2_PWM_INST, 800, DL_TIMER_CC_0_INDEX);
-
-    DL_TimerA_enableClock(STEPPER2_PWM_INST);
-
-
-    
-    DL_TimerA_setCCPDirection(STEPPER2_PWM_INST , DL_TIMER_CC0_OUTPUT );
-
-
-}
-/*
- * Timer clock configuration to be sourced by  / 1 (80000000 Hz)
- * timerClkFreq = (timerClkSrc / (timerClkDivRatio * (timerClkPrescale + 1)))
- *   80000000 Hz = 80000000 Hz / (1 * (0 + 1))
- */
-static const DL_TimerA_ClockConfig gSTEPPER1_PWMClockConfig = {
-    .clockSel = DL_TIMER_CLOCK_BUSCLK,
-    .divideRatio = DL_TIMER_CLOCK_DIVIDE_1,
-    .prescale = 0U
-};
-
-static const DL_TimerA_PWMConfig gSTEPPER1_PWMConfig = {
-    .pwmMode = DL_TIMER_PWM_MODE_EDGE_ALIGN,
-    .period = 800,
-    .isTimerWithFourCC = true,
-    .startTimer = DL_TIMER_STOP,
-};
-
-SYSCONFIG_WEAK void SYSCFG_DL_STEPPER1_PWM_init(void) {
-
-    DL_TimerA_setClockConfig(
-        STEPPER1_PWM_INST, (DL_TimerA_ClockConfig *) &gSTEPPER1_PWMClockConfig);
-
-    DL_TimerA_initPWMMode(
-        STEPPER1_PWM_INST, (DL_TimerA_PWMConfig *) &gSTEPPER1_PWMConfig);
-
-    // Set Counter control to the smallest CC index being used
-    DL_TimerA_setCounterControl(STEPPER1_PWM_INST,DL_TIMER_CZC_CCCTL0_ZCOND,DL_TIMER_CAC_CCCTL0_ACOND,DL_TIMER_CLC_CCCTL0_LCOND);
-
-    DL_TimerA_setCaptureCompareOutCtl(STEPPER1_PWM_INST, DL_TIMER_CC_OCTL_INIT_VAL_LOW,
-		DL_TIMER_CC_OCTL_INV_OUT_DISABLED, DL_TIMER_CC_OCTL_SRC_FUNCVAL,
-		DL_TIMERA_CAPTURE_COMPARE_0_INDEX);
-
-    DL_TimerA_setCaptCompUpdateMethod(STEPPER1_PWM_INST, DL_TIMER_CC_UPDATE_METHOD_IMMEDIATE, DL_TIMERA_CAPTURE_COMPARE_0_INDEX);
-    DL_TimerA_setCaptureCompareValue(STEPPER1_PWM_INST, 800, DL_TIMER_CC_0_INDEX);
-
-    DL_TimerA_enableClock(STEPPER1_PWM_INST);
-
-
-    
-    DL_TimerA_setCCPDirection(STEPPER1_PWM_INST , DL_TIMER_CC0_OUTPUT );
 
 
 }
