@@ -104,38 +104,22 @@ extern "C" {
 
 
 
-
-/* Defines for I2C */
-#define I2C_INST                                                            I2C1
-#define I2C_INST_IRQHandler                                      I2C1_IRQHandler
-#define I2C_INST_INT_IRQN                                          I2C1_INT_IRQn
-#define I2C_BUS_SPEED_HZ                                                  400000
-#define GPIO_I2C_SDA_PORT                                                  GPIOB
-#define GPIO_I2C_SDA_PIN                                           DL_GPIO_PIN_3
-#define GPIO_I2C_IOMUX_SDA                                       (IOMUX_PINCM16)
-#define GPIO_I2C_IOMUX_SDA_FUNC                        IOMUX_PINCM16_PF_I2C1_SDA
-#define GPIO_I2C_SCL_PORT                                                  GPIOB
-#define GPIO_I2C_SCL_PIN                                           DL_GPIO_PIN_2
-#define GPIO_I2C_IOMUX_SCL                                       (IOMUX_PINCM15)
-#define GPIO_I2C_IOMUX_SCL_FUNC                        IOMUX_PINCM15_PF_I2C1_SCL
-
-
-/* Defines for IMU601 */
-#define IMU601_INST                                                        UART1
-#define IMU601_INST_FREQUENCY                                           40000000
-#define IMU601_INST_IRQHandler                                  UART1_IRQHandler
-#define IMU601_INST_INT_IRQN                                      UART1_INT_IRQn
-#define GPIO_IMU601_RX_PORT                                                GPIOA
-#define GPIO_IMU601_TX_PORT                                                GPIOA
-#define GPIO_IMU601_RX_PIN                                         DL_GPIO_PIN_9
-#define GPIO_IMU601_TX_PIN                                         DL_GPIO_PIN_8
-#define GPIO_IMU601_IOMUX_RX                                     (IOMUX_PINCM20)
-#define GPIO_IMU601_IOMUX_TX                                     (IOMUX_PINCM19)
-#define GPIO_IMU601_IOMUX_RX_FUNC                      IOMUX_PINCM20_PF_UART1_RX
-#define GPIO_IMU601_IOMUX_TX_FUNC                      IOMUX_PINCM19_PF_UART1_TX
-#define IMU601_BAUD_RATE                                                (115200)
-#define IMU601_IBRD_40_MHZ_115200_BAUD                                      (21)
-#define IMU601_FBRD_40_MHZ_115200_BAUD                                      (45)
+/* Defines for DEBUG_UART */
+#define DEBUG_UART_INST                                                    UART0
+#define DEBUG_UART_INST_FREQUENCY                                       40000000
+#define DEBUG_UART_INST_IRQHandler                              UART0_IRQHandler
+#define DEBUG_UART_INST_INT_IRQN                                  UART0_INT_IRQn
+#define GPIO_DEBUG_UART_RX_PORT                                            GPIOA
+#define GPIO_DEBUG_UART_TX_PORT                                            GPIOA
+#define GPIO_DEBUG_UART_RX_PIN                                    DL_GPIO_PIN_11
+#define GPIO_DEBUG_UART_TX_PIN                                    DL_GPIO_PIN_10
+#define GPIO_DEBUG_UART_IOMUX_RX                                 (IOMUX_PINCM22)
+#define GPIO_DEBUG_UART_IOMUX_TX                                 (IOMUX_PINCM21)
+#define GPIO_DEBUG_UART_IOMUX_RX_FUNC                  IOMUX_PINCM22_PF_UART0_RX
+#define GPIO_DEBUG_UART_IOMUX_TX_FUNC                  IOMUX_PINCM21_PF_UART0_TX
+#define DEBUG_UART_BAUD_RATE                                            (115200)
+#define DEBUG_UART_IBRD_40_MHZ_115200_BAUD                                  (21)
+#define DEBUG_UART_FBRD_40_MHZ_115200_BAUD                                  (45)
 
 
 
@@ -259,8 +243,7 @@ void SYSCFG_DL_GPIO_init(void);
 void SYSCFG_DL_SYSCTL_init(void);
 void SYSCFG_DL_PWMA_init(void);
 void SYSCFG_DL_PWMB_init(void);
-void SYSCFG_DL_I2C_init(void);
-void SYSCFG_DL_IMU601_init(void);
+void SYSCFG_DL_DEBUG_UART_init(void);
 void SYSCFG_DL_SPI_OLED_init(void);
 
 void SYSCFG_DL_SYSTICK_init(void);

@@ -65,7 +65,7 @@ void Odom_Update(float dt)
     if (dt <= 0.0f || dt > 0.5f)
         return;
 
-    /* Counts updated by Encoder_Sample() from QEI before this call */
+    /* Counts from GPIO encoder ISR (EncoderA/B_Count) */
     cA = EncoderA_Count;
     cB = EncoderB_Count;
 

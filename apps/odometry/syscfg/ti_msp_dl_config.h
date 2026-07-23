@@ -78,23 +78,6 @@ extern "C" {
 
 
 
-
-/* Defines for QEI_A */
-#define QEI_A_INST                                                         TIMG8
-#define QEI_A_INST_IRQHandler                                   TIMG8_IRQHandler
-#define QEI_A_INST_INT_IRQN                                     (TIMG8_INT_IRQn)
-/* Pin configuration defines for QEI_A PHA Pin */
-#define GPIO_QEI_A_PHA_PORT                                                GPIOB
-#define GPIO_QEI_A_PHA_PIN                                         DL_GPIO_PIN_6
-#define GPIO_QEI_A_PHA_IOMUX                                     (IOMUX_PINCM23)
-#define GPIO_QEI_A_PHA_IOMUX_FUNC                    IOMUX_PINCM23_PF_TIMG8_CCP0
-/* Pin configuration defines for QEI_A PHB Pin */
-#define GPIO_QEI_A_PHB_PORT                                                GPIOB
-#define GPIO_QEI_A_PHB_PIN                                         DL_GPIO_PIN_7
-#define GPIO_QEI_A_PHB_IOMUX                                     (IOMUX_PINCM24)
-#define GPIO_QEI_A_PHB_IOMUX_FUNC                    IOMUX_PINCM24_PF_TIMG8_CCP1
-
-
 /* Defines for ODOM_TIM */
 #define ODOM_TIM_INST                                                    (TIMG0)
 #define ODOM_TIM_INST_IRQHandler                                TIMG0_IRQHandler
@@ -145,20 +128,32 @@ extern "C" {
 #define IMU601_INST_DMA_TRIGGER                              (DMA_UART1_RX_TRIG)
 
 
+/* Port definition for Pin Group GPIO_ENCODERA */
+#define GPIO_ENCODERA_PORT                                               (GPIOB)
+
+/* Defines for E1A: GPIOB.6 with pinCMx 23 on package pin 20 */
+// groups represented: ["GPIO_ENCODERB","GPIO_ENCODERA"]
+// pins affected: ["E2A","E2B","E1A","E1B"]
+#define GPIO_MULTIPLE_GPIOB_INT_IRQN                            (GPIOB_INT_IRQn)
+#define GPIO_MULTIPLE_GPIOB_INT_IIDX            (DL_INTERRUPT_GROUP1_IIDX_GPIOB)
+#define GPIO_ENCODERA_E1A_IIDX                               (DL_GPIO_IIDX_DIO6)
+#define GPIO_ENCODERA_E1A_PIN                                    (DL_GPIO_PIN_6)
+#define GPIO_ENCODERA_E1A_IOMUX                                  (IOMUX_PINCM23)
+/* Defines for E1B: GPIOB.7 with pinCMx 24 on package pin 21 */
+#define GPIO_ENCODERA_E1B_IIDX                               (DL_GPIO_IIDX_DIO7)
+#define GPIO_ENCODERA_E1B_PIN                                    (DL_GPIO_PIN_7)
+#define GPIO_ENCODERA_E1B_IOMUX                                  (IOMUX_PINCM24)
 /* Port definition for Pin Group GPIO_ENCODERB */
 #define GPIO_ENCODERB_PORT                                               (GPIOB)
 
-/* Defines for E2A: GPIOB.0 with pinCMx 12 on package pin 47 */
-// pins affected by this interrupt request:["E2A","E2B"]
-#define GPIO_ENCODERB_INT_IRQN                                  (GPIOB_INT_IRQn)
-#define GPIO_ENCODERB_INT_IIDX                  (DL_INTERRUPT_GROUP1_IIDX_GPIOB)
-#define GPIO_ENCODERB_E2A_IIDX                               (DL_GPIO_IIDX_DIO0)
-#define GPIO_ENCODERB_E2A_PIN                                    (DL_GPIO_PIN_0)
-#define GPIO_ENCODERB_E2A_IOMUX                                  (IOMUX_PINCM12)
-/* Defines for E2B: GPIOB.5 with pinCMx 18 on package pin 53 */
-#define GPIO_ENCODERB_E2B_IIDX                               (DL_GPIO_IIDX_DIO5)
-#define GPIO_ENCODERB_E2B_PIN                                    (DL_GPIO_PIN_5)
-#define GPIO_ENCODERB_E2B_IOMUX                                  (IOMUX_PINCM18)
+/* Defines for E2A: GPIOB.15 with pinCMx 32 on package pin 25 */
+#define GPIO_ENCODERB_E2A_IIDX                              (DL_GPIO_IIDX_DIO15)
+#define GPIO_ENCODERB_E2A_PIN                                   (DL_GPIO_PIN_15)
+#define GPIO_ENCODERB_E2A_IOMUX                                  (IOMUX_PINCM32)
+/* Defines for E2B: GPIOB.16 with pinCMx 33 on package pin 26 */
+#define GPIO_ENCODERB_E2B_IIDX                              (DL_GPIO_IIDX_DIO16)
+#define GPIO_ENCODERB_E2B_PIN                                   (DL_GPIO_PIN_16)
+#define GPIO_ENCODERB_E2B_IOMUX                                  (IOMUX_PINCM33)
 
 
 
@@ -168,7 +163,6 @@ void SYSCFG_DL_init(void);
 void SYSCFG_DL_initPower(void);
 void SYSCFG_DL_GPIO_init(void);
 void SYSCFG_DL_SYSCTL_init(void);
-void SYSCFG_DL_QEI_A_init(void);
 void SYSCFG_DL_ODOM_TIM_init(void);
 void SYSCFG_DL_DEBUG_UART_init(void);
 void SYSCFG_DL_IMU601_init(void);

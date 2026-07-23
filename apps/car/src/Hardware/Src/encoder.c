@@ -1,124 +1,147 @@
 #include "encoder.h"
-//#include "mpu6050.h"
+#include "ti_msp_dl_config.h"
 #include "bsp_systick.h"
 
-/* Pulse counts — updated by ISR, read by application
- * (MPU6050 INT / PB1 removed after switching to IMU601 over UART) */
+/*
+ * Dual GPIO x4 quadrature (gray-code table) — same algorithm as apps/odometry
+ *   EncA: PB0 / PB5
+ *   EncB: PB23 / PB18
+ *
+ * Full 4x: every valid A/B edge counts ±1 (no else-if drop).
+ */
+
 volatile int32_t EncoderA_Count = 0;
 volatile int32_t EncoderB_Count = 0;
-
-/* Speed (pulses/sec) — updated by Encoder_UpdateSpeed() */
 volatile float EncoderA_Speed = 0.0f;
 volatile float EncoderB_Speed = 0.0f;
 
-/* Previous counts for speed calculation */
-static int32_t prev_countA = 0;
-static int32_t prev_countB = 0;
-static uint32_t prev_tick = 0;
+/* last state: bit1=phaseA, bit0=phaseB */
+static uint8_t s_prevA;
+static uint8_t s_prevB;
+
+/* speed: previous counts + SysTick VAL */
+static int32_t s_prevCountA;
+static int32_t s_prevCountB;
+static uint32_t s_prevTick;
 
 /*
- * GROUP1_IRQHandler — handles all GPIOB interrupts:
- *   PB0  (EncoderA PhaseA) → quadrature decode
- *   PB5  (EncoderA PhaseB)
- *   PB12 (EncoderB PhaseA)
- *   PB18 (EncoderB PhaseB)
+ * Index = (old<<2) | new ; value = delta
+ * Only legal gray-code steps are ±1; noise/illegal → 0
  */
+static const int8_t s_qem[16] = {
+    0,  +1, -1,  0,
+    -1,  0,  0, +1,
+    +1,  0,  0, -1,
+     0, -1, +1,  0
+};
+
+static uint8_t read_ab(GPIO_Regs *port, uint32_t pinA, uint32_t pinB)
+{
+    uint8_t a = DL_GPIO_readPins(port, pinA) ? 1u : 0u;
+    uint8_t b = DL_GPIO_readPins(port, pinB) ? 1u : 0u;
+    return (uint8_t)((a << 1) | b);
+}
+
 void GROUP1_IRQHandler(void)
 {
-    uint32_t status;
+    uint32_t stA = DL_GPIO_getEnabledInterruptStatus(
+        GPIO_ENCODERA_PORT,
+        GPIO_ENCODERA_E1A_PIN | GPIO_ENCODERA_E1B_PIN);
+    uint32_t stB = DL_GPIO_getEnabledInterruptStatus(
+        GPIO_ENCODERB_PORT,
+        GPIO_ENCODERB_E2A_PIN | GPIO_ENCODERB_E2B_PIN);
 
-    status = DL_GPIO_getEnabledInterruptStatus(GPIOB,
+    if (stA != 0u) {
+        uint8_t now = read_ab(GPIO_ENCODERA_PORT,
+            GPIO_ENCODERA_E1A_PIN, GPIO_ENCODERA_E1B_PIN);
+        EncoderA_Count += s_qem[(s_prevA << 2) | now];
+        s_prevA = now;
+        DL_GPIO_clearInterruptStatus(GPIO_ENCODERA_PORT, stA);
+    }
+
+    if (stB != 0u) {
+        uint8_t now = read_ab(GPIO_ENCODERB_PORT,
+            GPIO_ENCODERB_E2A_PIN, GPIO_ENCODERB_E2B_PIN);
+        EncoderB_Count += s_qem[(s_prevB << 2) | now];
+        s_prevB = now;
+        DL_GPIO_clearInterruptStatus(GPIO_ENCODERB_PORT, stB);
+    }
+}
+
+void Encoder_Init(void)
+{
+    EncoderA_Count = 0;
+    EncoderB_Count = 0;
+    EncoderA_Speed = 0.0f;
+    EncoderB_Speed = 0.0f;
+    s_prevCountA   = 0;
+    s_prevCountB   = 0;
+    s_prevTick     = Systick_getTick();
+
+    s_prevA = read_ab(GPIO_ENCODERA_PORT,
+        GPIO_ENCODERA_E1A_PIN, GPIO_ENCODERA_E1B_PIN);
+    s_prevB = read_ab(GPIO_ENCODERB_PORT,
+        GPIO_ENCODERB_E2A_PIN, GPIO_ENCODERB_E2B_PIN);
+
+    DL_GPIO_clearInterruptStatus(GPIOB,
         GPIO_ENCODERA_E1A_PIN | GPIO_ENCODERA_E1B_PIN |
         GPIO_ENCODERB_E2A_PIN | GPIO_ENCODERB_E2B_PIN);
 
-    /* --- Encoder A Phase A (PB0, both edges) --- */
-    if (status & GPIO_ENCODERA_E1A_PIN)
-    {
-        if (DL_GPIO_readPins(GPIO_ENCODERA_PORT, GPIO_ENCODERA_E1B_PIN))
-            EncoderA_Count++;
-        else
-            EncoderA_Count--;
-    }
-
-    /* --- Encoder A Phase B (PB5, both edges) --- */
-    if (status & GPIO_ENCODERA_E1B_PIN)
-    {
-        if (DL_GPIO_readPins(GPIO_ENCODERA_PORT, GPIO_ENCODERA_E1A_PIN))
-            EncoderA_Count--;
-        else
-            EncoderA_Count++;
-    }
-
-    /* --- Encoder B Phase A (PB12, both edges) --- */
-    if (status & GPIO_ENCODERB_E2A_PIN)
-    {
-        if (DL_GPIO_readPins(GPIO_ENCODERB_PORT, GPIO_ENCODERB_E2B_PIN))
-            EncoderB_Count++;
-        else
-            EncoderB_Count--;
-    }
-
-    /* --- Encoder B Phase B (PB18, both edges) --- */
-    if (status & GPIO_ENCODERB_E2B_PIN)
-    {
-        if (DL_GPIO_readPins(GPIO_ENCODERB_PORT, GPIO_ENCODERB_E2A_PIN))
-            EncoderB_Count--;
-        else
-            EncoderB_Count++;
-    }
-
-    DL_GPIO_clearInterruptStatus(GPIOB, status);
+    NVIC_ClearPendingIRQ(GPIO_MULTIPLE_GPIOB_INT_IRQN);
+    NVIC_EnableIRQ(GPIO_MULTIPLE_GPIOB_INT_IRQN);
 }
 
-/*
- * Initialize encoder subsystem.
- * GPIO init is done by SYSCFG_DL_GPIO_init(); this just resets counters.
- */
-void Encoder_Init(void)
+void Encoder_Sample(void)
 {
-    EncoderA_Count  = 0;
-    EncoderB_Count  = 0;
-    EncoderA_Speed  = 0.0f;
-    EncoderB_Speed  = 0.0f;
-    prev_countA     = 0;
-    prev_countB     = 0;
-    prev_tick       = Systick_getTick();
-
-    /* NVIC enable — GPIO init already sets pin-level interrupt,
-     * but the Cortex-M0+ NVIC must be explicitly enabled. */
-    NVIC_EnableIRQ(GPIOB_INT_IRQn);
 }
 
 /*
- * Call periodically (~every 10ms) to compute speed from pulse counts.
+ * Call every ~10~100ms. dt from SysTick VAL (must be < ~209ms).
  */
 void Encoder_UpdateSpeed(void)
 {
+    const uint32_t period = SysTickMAX_COUNT + 1U;
     uint32_t now = Systick_getTick();
+    uint32_t elapsed_cyc;
     float dt;
 
-    if (prev_tick == 0)
-    {
-        prev_tick = now;
+    if (s_prevTick >= now)
+        elapsed_cyc = s_prevTick - now;
+    else
+        elapsed_cyc = s_prevTick + period - now;
+
+    dt = (float)elapsed_cyc / (float)SysTickFre;
+    if (dt < 0.001f || dt > 0.25f) {
+        s_prevCountA = EncoderA_Count;
+        s_prevCountB = EncoderB_Count;
+        s_prevTick   = now;
         return;
     }
 
-    dt = (float)(now - prev_tick) / 1000.0f;  /* seconds */
-    if (dt <= 0.0f || dt > 1.0f)
-    {
-        prev_countA = EncoderA_Count;
-        prev_countB = EncoderB_Count;
-        prev_tick   = now;
-        return;
-    }
+    EncoderA_Speed = (float)(EncoderA_Count - s_prevCountA) / dt;
+    EncoderB_Speed = (float)(EncoderB_Count - s_prevCountB) / dt;
 
-    EncoderA_Speed = (float)(EncoderA_Count - prev_countA) / dt;
-    EncoderB_Speed = (float)(EncoderB_Count - prev_countB) / dt;
-
-    prev_countA = EncoderA_Count;
-    prev_countB = EncoderB_Count;
-    prev_tick   = now;
+    s_prevCountA = EncoderA_Count;
+    s_prevCountB = EncoderB_Count;
+    s_prevTick   = now;
 }
 
-void EncoderA_Reset(void) { EncoderA_Count = 0; EncoderA_Speed = 0.0f; }
-void EncoderB_Reset(void) { EncoderB_Count = 0; EncoderB_Speed = 0.0f; }
+void EncoderA_Reset(void)
+{
+    EncoderA_Count = 0;
+    EncoderA_Speed = 0.0f;
+    s_prevCountA   = 0;
+    s_prevA = read_ab(GPIO_ENCODERA_PORT,
+        GPIO_ENCODERA_E1A_PIN, GPIO_ENCODERA_E1B_PIN);
+    s_prevTick = Systick_getTick();
+}
+
+void EncoderB_Reset(void)
+{
+    EncoderB_Count = 0;
+    EncoderB_Speed = 0.0f;
+    s_prevCountB   = 0;
+    s_prevB = read_ab(GPIO_ENCODERB_PORT,
+        GPIO_ENCODERB_E2A_PIN, GPIO_ENCODERB_E2B_PIN);
+    s_prevTick = Systick_getTick();
+}

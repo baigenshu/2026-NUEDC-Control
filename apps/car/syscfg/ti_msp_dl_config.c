@@ -55,8 +55,7 @@ SYSCONFIG_WEAK void SYSCFG_DL_init(void)
     SYSCFG_DL_SYSCTL_init();
     SYSCFG_DL_PWMA_init();
     SYSCFG_DL_PWMB_init();
-    SYSCFG_DL_I2C_init();
-    SYSCFG_DL_IMU601_init();
+    SYSCFG_DL_DEBUG_UART_init();
     SYSCFG_DL_SPI_OLED_init();
     SYSCFG_DL_SYSTICK_init();
     /* Ensure backup structures have no valid state */
@@ -96,8 +95,7 @@ SYSCONFIG_WEAK void SYSCFG_DL_initPower(void)
     DL_GPIO_reset(GPIOB);
     DL_TimerG_reset(PWMA_INST);
     DL_TimerG_reset(PWMB_INST);
-    DL_I2C_reset(I2C_INST);
-    DL_UART_Main_reset(IMU601_INST);
+    DL_UART_Main_reset(DEBUG_UART_INST);
     DL_SPI_reset(SPI_OLED_INST);
 
 
@@ -105,8 +103,7 @@ SYSCONFIG_WEAK void SYSCFG_DL_initPower(void)
     DL_GPIO_enablePower(GPIOB);
     DL_TimerG_enablePower(PWMA_INST);
     DL_TimerG_enablePower(PWMB_INST);
-    DL_I2C_enablePower(I2C_INST);
-    DL_UART_Main_enablePower(IMU601_INST);
+    DL_UART_Main_enablePower(DEBUG_UART_INST);
     DL_SPI_enablePower(SPI_OLED_INST);
 
     delay_cycles(POWER_STARTUP_DELAY);
@@ -120,22 +117,10 @@ SYSCONFIG_WEAK void SYSCFG_DL_GPIO_init(void)
     DL_GPIO_initPeripheralOutputFunction(GPIO_PWMB_C0_IOMUX,GPIO_PWMB_C0_IOMUX_FUNC);
     DL_GPIO_enableOutput(GPIO_PWMB_C0_PORT, GPIO_PWMB_C0_PIN);
 
-    
-	DL_GPIO_initPeripheralInputFunctionFeatures(
-		 GPIO_I2C_IOMUX_SDA, GPIO_I2C_IOMUX_SDA_FUNC,
-		 DL_GPIO_INVERSION_DISABLE, DL_GPIO_RESISTOR_NONE,
-		 DL_GPIO_HYSTERESIS_DISABLE, DL_GPIO_WAKEUP_DISABLE);
-	DL_GPIO_initPeripheralInputFunctionFeatures(
-		 GPIO_I2C_IOMUX_SCL, GPIO_I2C_IOMUX_SCL_FUNC,
-		 DL_GPIO_INVERSION_DISABLE, DL_GPIO_RESISTOR_NONE,
-		 DL_GPIO_HYSTERESIS_DISABLE, DL_GPIO_WAKEUP_DISABLE);
-    DL_GPIO_enableHiZ(GPIO_I2C_IOMUX_SDA);
-    DL_GPIO_enableHiZ(GPIO_I2C_IOMUX_SCL);
-
     DL_GPIO_initPeripheralOutputFunction(
-        GPIO_IMU601_IOMUX_TX, GPIO_IMU601_IOMUX_TX_FUNC);
+        GPIO_DEBUG_UART_IOMUX_TX, GPIO_DEBUG_UART_IOMUX_TX_FUNC);
     DL_GPIO_initPeripheralInputFunction(
-        GPIO_IMU601_IOMUX_RX, GPIO_IMU601_IOMUX_RX_FUNC);
+        GPIO_DEBUG_UART_IOMUX_RX, GPIO_DEBUG_UART_IOMUX_RX_FUNC);
 
     DL_GPIO_initPeripheralOutputFunction(
         GPIO_SPI_OLED_IOMUX_SCLK, GPIO_SPI_OLED_IOMUX_SCLK_FUNC);
@@ -201,7 +186,7 @@ SYSCONFIG_WEAK void SYSCFG_DL_GPIO_init(void)
 		 DL_GPIO_HYSTERESIS_DISABLE, DL_GPIO_WAKEUP_DISABLE);
 
     DL_GPIO_initDigitalInputFeatures(GPIO_ENCODERB_E2A_IOMUX,
-		 DL_GPIO_INVERSION_DISABLE, DL_GPIO_RESISTOR_NONE,
+		 DL_GPIO_INVERSION_DISABLE, DL_GPIO_RESISTOR_PULL_UP,
 		 DL_GPIO_HYSTERESIS_DISABLE, DL_GPIO_WAKEUP_DISABLE);
 
     DL_GPIO_initDigitalInputFeatures(GPIO_ENCODERB_E2B_IOMUX,
@@ -362,40 +347,12 @@ SYSCONFIG_WEAK void SYSCFG_DL_PWMB_init(void) {
 }
 
 
-static const DL_I2C_ClockConfig gI2CClockConfig = {
-    .clockSel = DL_I2C_CLOCK_BUSCLK,
-    .divideRatio = DL_I2C_CLOCK_DIVIDE_1,
-};
-
-SYSCONFIG_WEAK void SYSCFG_DL_I2C_init(void) {
-
-    DL_I2C_setClockConfig(I2C_INST,
-        (DL_I2C_ClockConfig *) &gI2CClockConfig);
-    DL_I2C_setAnalogGlitchFilterPulseWidth(I2C_INST,
-        DL_I2C_ANALOG_GLITCH_FILTER_WIDTH_50NS);
-    DL_I2C_enableAnalogGlitchFilter(I2C_INST);
-
-    /* Configure Controller Mode */
-    DL_I2C_resetControllerTransfer(I2C_INST);
-    /* Set frequency to 400000 Hz*/
-    DL_I2C_setTimerPeriod(I2C_INST, 9);
-    DL_I2C_setControllerTXFIFOThreshold(I2C_INST, DL_I2C_TX_FIFO_LEVEL_EMPTY);
-    DL_I2C_setControllerRXFIFOThreshold(I2C_INST, DL_I2C_RX_FIFO_LEVEL_BYTES_1);
-    DL_I2C_enableControllerClockStretching(I2C_INST);
-
-
-    /* Enable module */
-    DL_I2C_enableController(I2C_INST);
-
-
-}
-
-static const DL_UART_Main_ClockConfig gIMU601ClockConfig = {
+static const DL_UART_Main_ClockConfig gDEBUG_UARTClockConfig = {
     .clockSel    = DL_UART_MAIN_CLOCK_BUSCLK,
     .divideRatio = DL_UART_MAIN_CLOCK_DIVIDE_RATIO_1
 };
 
-static const DL_UART_Main_Config gIMU601Config = {
+static const DL_UART_Main_Config gDEBUG_UARTConfig = {
     .mode        = DL_UART_MAIN_MODE_NORMAL,
     .direction   = DL_UART_MAIN_DIRECTION_TX_RX,
     .flowControl = DL_UART_MAIN_FLOW_CONTROL_NONE,
@@ -404,26 +361,22 @@ static const DL_UART_Main_Config gIMU601Config = {
     .stopBits    = DL_UART_MAIN_STOP_BITS_ONE
 };
 
-SYSCONFIG_WEAK void SYSCFG_DL_IMU601_init(void)
+SYSCONFIG_WEAK void SYSCFG_DL_DEBUG_UART_init(void)
 {
-    DL_UART_Main_setClockConfig(IMU601_INST, (DL_UART_Main_ClockConfig *) &gIMU601ClockConfig);
+    DL_UART_Main_setClockConfig(DEBUG_UART_INST, (DL_UART_Main_ClockConfig *) &gDEBUG_UARTClockConfig);
 
-    DL_UART_Main_init(IMU601_INST, (DL_UART_Main_Config *) &gIMU601Config);
+    DL_UART_Main_init(DEBUG_UART_INST, (DL_UART_Main_Config *) &gDEBUG_UARTConfig);
     /*
      * Configure baud rate by setting oversampling and baud rate divisors.
      *  Target baud rate: 115200
      *  Actual baud rate: 115190.78
      */
-    DL_UART_Main_setOversampling(IMU601_INST, DL_UART_OVERSAMPLING_RATE_16X);
-    DL_UART_Main_setBaudRateDivisor(IMU601_INST, IMU601_IBRD_40_MHZ_115200_BAUD, IMU601_FBRD_40_MHZ_115200_BAUD);
+    DL_UART_Main_setOversampling(DEBUG_UART_INST, DL_UART_OVERSAMPLING_RATE_16X);
+    DL_UART_Main_setBaudRateDivisor(DEBUG_UART_INST, DEBUG_UART_IBRD_40_MHZ_115200_BAUD, DEBUG_UART_FBRD_40_MHZ_115200_BAUD);
 
 
-    /* Configure Interrupts */
-    DL_UART_Main_enableInterrupt(IMU601_INST,
-                                 DL_UART_MAIN_INTERRUPT_RX);
 
-
-    DL_UART_Main_enable(IMU601_INST);
+    DL_UART_Main_enable(DEBUG_UART_INST);
 }
 
 static const DL_SPI_Config gSPI_OLED_config = {

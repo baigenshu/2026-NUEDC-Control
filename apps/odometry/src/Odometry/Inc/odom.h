@@ -4,32 +4,31 @@
 #include <stdint.h>
 
 /*
- * Minimal differential-drive odometry
- *   - linear speed from dual encoders
- *   - heading from IMU601 yaw (deg)
- *   - pose integrate: x,y in meters, theta in rad
+ * 最小差速底盘里程计
+ *   - 由双编码器计算线速度
+ *   - 由 IMU601 航向角（deg）计算朝向
+ *   - 位姿积分：x、y 单位为米，theta 单位为弧度
  */
 
 typedef struct {
-    float x;       /* m */
-    float y;       /* m */
-    float theta;   /* rad, CCW+ */
-    float v;       /* m/s body linear */
-    float omega;   /* rad/s body angular (from yaw delta) */
-    uint32_t status; /* bit0: slip warn (reserved) */
+    float x;       /* 米 */
+    float y;       /* 米 */
+    float theta;   /* 弧度，逆时针为正 */
+    float v;       /* 车体线速度，米/秒 */
+    float omega;   /* 车体角速度，弧度/秒（由航向角差计算） */
+    uint32_t status; /* bit0：打滑告警（保留） */
 } OdomState_t;
 
-/* Robot geometry / encoder scale — calibrate on real vehicle */
+/* 机器人几何参数 / 编码器比例（实车可再标定） */
 #ifndef ODOM_WHEEL_RADIUS_M
-#define ODOM_WHEEL_RADIUS_M     (0.0325f)   /* wheel radius (m) */
+#define ODOM_WHEEL_RADIUS_M     (0.0230f)   /* 车轮半径（米），直径约 46mm */
 #endif
 #ifndef ODOM_WHEEL_BASE_M
-#define ODOM_WHEEL_BASE_M       (0.160f)    /* left-right distance (m) */
+#define ODOM_WHEEL_BASE_M       (0.135f)    /* 左右轮中心距（米） */
 #endif
 #ifndef ODOM_PULSES_PER_REV
-#define ODOM_PULSES_PER_REV     (1040.0f)   /* encoder pulses per wheel rev (4x) */
+#define ODOM_PULSES_PER_REV     (1040.0f)   /* 每圈脉冲数（4 倍频） */
 #endif
-/* Encoder sign: set -1 if wiring/mount is reversed */
 #ifndef ODOM_ENC_A_SIGN
 #define ODOM_ENC_A_SIGN         (1.0f)
 #endif
@@ -40,7 +39,7 @@ typedef struct {
 void Odom_Init(void);
 void Odom_Reset(void);
 
-/* Call at ~100 Hz with measured dt (seconds). */
+/* 以约 100 Hz 调用，dt 为实测时间间隔（秒）。 */
 void Odom_Update(float dt);
 
 const OdomState_t *Odom_GetState(void);

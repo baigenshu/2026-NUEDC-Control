@@ -40,8 +40,6 @@
 
 #include "ti_msp_dl_config.h"
 
-DL_TimerG_backupConfig gQEI_ABackup;
-
 /*
  *  ======== SYSCFG_DL_init ========
  *  Perform any initialization needed before using any board APIs
@@ -52,46 +50,19 @@ SYSCONFIG_WEAK void SYSCFG_DL_init(void)
     SYSCFG_DL_GPIO_init();
     /* Module-Specific Initializations*/
     SYSCFG_DL_SYSCTL_init();
-    SYSCFG_DL_QEI_A_init();
     SYSCFG_DL_ODOM_TIM_init();
     SYSCFG_DL_DEBUG_UART_init();
     SYSCFG_DL_IMU601_init();
     SYSCFG_DL_DMA_init();
     SYSCFG_DL_SYSTICK_init();
-    /* Ensure backup structures have no valid state */
-	gQEI_ABackup.backupRdy 	= false;
-
-
-
-}
-/*
- * User should take care to save and restore register configuration in application.
- * See Retention Configuration section for more details.
- */
-SYSCONFIG_WEAK bool SYSCFG_DL_saveConfiguration(void)
-{
-    bool retStatus = true;
-
-	retStatus &= DL_TimerG_saveConfiguration(QEI_A_INST, &gQEI_ABackup);
-
-    return retStatus;
 }
 
 
-SYSCONFIG_WEAK bool SYSCFG_DL_restoreConfiguration(void)
-{
-    bool retStatus = true;
-
-	retStatus &= DL_TimerG_restoreConfiguration(QEI_A_INST, &gQEI_ABackup, false);
-
-    return retStatus;
-}
 
 SYSCONFIG_WEAK void SYSCFG_DL_initPower(void)
 {
     DL_GPIO_reset(GPIOA);
     DL_GPIO_reset(GPIOB);
-    DL_TimerG_reset(QEI_A_INST);
     DL_TimerG_reset(ODOM_TIM_INST);
     DL_UART_Main_reset(DEBUG_UART_INST);
     DL_UART_Main_reset(IMU601_INST);
@@ -100,7 +71,6 @@ SYSCONFIG_WEAK void SYSCFG_DL_initPower(void)
 
     DL_GPIO_enablePower(GPIOA);
     DL_GPIO_enablePower(GPIOB);
-    DL_TimerG_enablePower(QEI_A_INST);
     DL_TimerG_enablePower(ODOM_TIM_INST);
     DL_UART_Main_enablePower(DEBUG_UART_INST);
     DL_UART_Main_enablePower(IMU601_INST);
@@ -112,9 +82,6 @@ SYSCONFIG_WEAK void SYSCFG_DL_initPower(void)
 SYSCONFIG_WEAK void SYSCFG_DL_GPIO_init(void)
 {
 
-    DL_GPIO_initPeripheralInputFunction(GPIO_QEI_A_PHA_IOMUX,GPIO_QEI_A_PHA_IOMUX_FUNC);
-    DL_GPIO_initPeripheralInputFunction(GPIO_QEI_A_PHB_IOMUX,GPIO_QEI_A_PHB_IOMUX_FUNC);
-
     DL_GPIO_initPeripheralOutputFunction(
         GPIO_DEBUG_UART_IOMUX_TX, GPIO_DEBUG_UART_IOMUX_TX_FUNC);
     DL_GPIO_initPeripheralInputFunction(
@@ -124,6 +91,14 @@ SYSCONFIG_WEAK void SYSCFG_DL_GPIO_init(void)
     DL_GPIO_initPeripheralInputFunction(
         GPIO_IMU601_IOMUX_RX, GPIO_IMU601_IOMUX_RX_FUNC);
 
+    DL_GPIO_initDigitalInputFeatures(GPIO_ENCODERA_E1A_IOMUX,
+		 DL_GPIO_INVERSION_DISABLE, DL_GPIO_RESISTOR_PULL_UP,
+		 DL_GPIO_HYSTERESIS_DISABLE, DL_GPIO_WAKEUP_DISABLE);
+
+    DL_GPIO_initDigitalInputFeatures(GPIO_ENCODERA_E1B_IOMUX,
+		 DL_GPIO_INVERSION_DISABLE, DL_GPIO_RESISTOR_PULL_UP,
+		 DL_GPIO_HYSTERESIS_DISABLE, DL_GPIO_WAKEUP_DISABLE);
+
     DL_GPIO_initDigitalInputFeatures(GPIO_ENCODERB_E2A_IOMUX,
 		 DL_GPIO_INVERSION_DISABLE, DL_GPIO_RESISTOR_PULL_UP,
 		 DL_GPIO_HYSTERESIS_DISABLE, DL_GPIO_WAKEUP_DISABLE);
@@ -132,11 +107,17 @@ SYSCONFIG_WEAK void SYSCFG_DL_GPIO_init(void)
 		 DL_GPIO_INVERSION_DISABLE, DL_GPIO_RESISTOR_PULL_UP,
 		 DL_GPIO_HYSTERESIS_DISABLE, DL_GPIO_WAKEUP_DISABLE);
 
-    DL_GPIO_setLowerPinsPolarity(GPIO_ENCODERB_PORT, DL_GPIO_PIN_0_EDGE_RISE_FALL |
-		DL_GPIO_PIN_5_EDGE_RISE_FALL);
-    DL_GPIO_clearInterruptStatus(GPIO_ENCODERB_PORT, GPIO_ENCODERB_E2A_PIN |
+    DL_GPIO_setLowerPinsPolarity(GPIOB, DL_GPIO_PIN_6_EDGE_RISE_FALL |
+		DL_GPIO_PIN_7_EDGE_RISE_FALL |
+		DL_GPIO_PIN_15_EDGE_RISE_FALL);
+    DL_GPIO_setUpperPinsPolarity(GPIOB, DL_GPIO_PIN_16_EDGE_RISE_FALL);
+    DL_GPIO_clearInterruptStatus(GPIOB, GPIO_ENCODERA_E1A_PIN |
+		GPIO_ENCODERA_E1B_PIN |
+		GPIO_ENCODERB_E2A_PIN |
 		GPIO_ENCODERB_E2B_PIN);
-    DL_GPIO_enableInterrupt(GPIO_ENCODERB_PORT, GPIO_ENCODERB_E2A_PIN |
+    DL_GPIO_enableInterrupt(GPIOB, GPIO_ENCODERA_E1A_PIN |
+		GPIO_ENCODERA_E1B_PIN |
+		GPIO_ENCODERB_E2A_PIN |
 		GPIO_ENCODERB_E2B_PIN);
 
 }
@@ -171,27 +152,6 @@ SYSCONFIG_WEAK void SYSCFG_DL_SYSCTL_init(void)
     DL_SYSCTL_setULPCLKDivider(DL_SYSCTL_ULPCLK_DIV_2);
     DL_SYSCTL_setMCLKSource(SYSOSC, HSCLK, DL_SYSCTL_HSCLK_SOURCE_SYSPLL);
 
-}
-
-
-static const DL_TimerG_ClockConfig gQEI_AClockConfig = {
-    .clockSel = DL_TIMER_CLOCK_BUSCLK,
-    .divideRatio = DL_TIMER_CLOCK_DIVIDE_1,
-    .prescale = 0U
-};
-
-
-SYSCONFIG_WEAK void SYSCFG_DL_QEI_A_init(void) {
-
-    DL_TimerG_setClockConfig(
-        QEI_A_INST, (DL_TimerG_ClockConfig *) &gQEI_AClockConfig);
-
-    DL_TimerG_configQEI(QEI_A_INST, DL_TIMER_QEI_MODE_2_INPUT,
-        DL_TIMER_CC_INPUT_INV_NOINVERT, DL_TIMER_CC_0_INDEX);
-    DL_TimerG_configQEI(QEI_A_INST, DL_TIMER_QEI_MODE_2_INPUT,
-        DL_TIMER_CC_INPUT_INV_NOINVERT, DL_TIMER_CC_1_INDEX);
-    DL_TimerG_setLoadValue(QEI_A_INST, 65535);
-    DL_TimerG_enableClock(QEI_A_INST);
 }
 
 

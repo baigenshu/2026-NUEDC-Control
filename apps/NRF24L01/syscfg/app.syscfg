@@ -1,0 +1,89 @@
+/**
+ * These arguments were used when this file was generated. They will be automatically applied on subsequent loads
+ * via the GUI or CLI. Run CLI with '--help' for additional information on how to override these arguments.
+ * @cliArgs --device "MSPM0G350X" --part "Default" --package "LQFP-48(PT)" --product "mspm0_sdk@2.05.01.00"
+ * @v2CliArgs --device "MSPM0G3507" --package "LQFP-48(PT)" --product "mspm0_sdk@2.05.01.00"
+ * @versions {"tool":"1.24.1+4189"}
+ */
+
+/**
+ * Import the modules used in this configuration.
+ */
+const GPIO   = scripting.addModule("/ti/driverlib/GPIO", {}, false);
+const GPIO1  = GPIO.addInstance();
+const SPI    = scripting.addModule("/ti/driverlib/SPI", {}, false);
+const SPI1   = SPI.addInstance();
+const SYSCTL = scripting.addModule("/ti/driverlib/SYSCTL");
+const UART   = scripting.addModule("/ti/driverlib/UART", {}, false);
+const UART1  = UART.addInstance();
+
+/**
+ * Write custom configuration values to the imported modules.
+ */
+const Board                       = scripting.addModule("/ti/driverlib/Board", {}, false);
+Board.peripheral.$assign          = "DEBUGSS";
+Board.peripheral.swclkPin.$assign = "PA20";
+Board.peripheral.swdioPin.$assign = "PA19";
+
+/* NRF24L01 control: CSN=PA8 CE=PA9 IRQ=PA15 (gimbal pin pool, not UART) */
+GPIO1.$name                              = "GPIO";
+GPIO1.port                               = "PORTA";
+GPIO1.associatedPins.create(3);
+GPIO1.associatedPins[0].$name            = "CS";
+GPIO1.associatedPins[0].direction        = "OUTPUT";
+GPIO1.associatedPins[0].initialValue     = "SET";
+GPIO1.associatedPins[0].assignedPin      = "8";
+GPIO1.associatedPins[0].pin.$assign      = "PA8";
+GPIO1.associatedPins[1].$name            = "CE";
+GPIO1.associatedPins[1].direction        = "OUTPUT";
+GPIO1.associatedPins[1].initialValue     = "CLEARED";
+GPIO1.associatedPins[1].assignedPin      = "9";
+GPIO1.associatedPins[1].pin.$assign      = "PA9";
+GPIO1.associatedPins[2].$name            = "IRQ";
+GPIO1.associatedPins[2].direction        = "INPUT";
+GPIO1.associatedPins[2].interruptEn      = true;
+GPIO1.associatedPins[2].polarity         = "FALL";
+GPIO1.associatedPins[2].assignedPin      = "15";
+GPIO1.associatedPins[2].pin.$assign      = "PA15";
+
+/* SPI0: SCK=PA12 MOSI=PA14 MISO=PA13 (wiki SPI bus, also in gimbal pool) */
+SPI1.$name                              = "SPI";
+SPI1.targetBitRate                      = 8000000;
+SPI1.frameFormat                        = "MOTO3";
+SPI1.sclkPinConfig.direction            = scripting.forceWrite("OUTPUT");
+SPI1.sclkPinConfig.onlyInternalResistor = scripting.forceWrite(false);
+SPI1.sclkPinConfig.passedPeripheralType = scripting.forceWrite("Digital");
+SPI1.sclkPinConfig.$name                = "ti_driverlib_gpio_GPIOPinGeneric_spi_sclk";
+SPI1.mosiPinConfig.direction            = scripting.forceWrite("OUTPUT");
+SPI1.mosiPinConfig.hideOutputInversion  = scripting.forceWrite(false);
+SPI1.mosiPinConfig.onlyInternalResistor = scripting.forceWrite(false);
+SPI1.mosiPinConfig.passedPeripheralType = scripting.forceWrite("Digital");
+SPI1.mosiPinConfig.$name                = "ti_driverlib_gpio_GPIOPinGeneric_spi_mosi";
+SPI1.misoPinConfig.onlyInternalResistor = scripting.forceWrite(false);
+SPI1.misoPinConfig.passedPeripheralType = scripting.forceWrite("Digital");
+SPI1.misoPinConfig.$name                = "ti_driverlib_gpio_GPIOPinGeneric_spi_miso";
+SPI1.peripheral.$assign                 = "SPI0";
+SPI1.peripheral.sclkPin.$assign         = "PA12";
+SPI1.peripheral.mosiPin.$assign         = "PA14";
+SPI1.peripheral.misoPin.$assign         = "PA13";
+
+SYSCTL.forceDefaultClkConfig = true;
+
+/* Debug UART same as gimbal PRINT: PA28 TX / PA31 RX */
+UART1.targetBaudRate                   = 115200;
+UART1.$name                            = "PRINT";
+UART1.peripheral.$assign               = "UART0";
+UART1.peripheral.rxPin.$assign         = "PA31";
+UART1.peripheral.txPin.$assign         = "PA28";
+UART1.txPinConfig.direction            = scripting.forceWrite("OUTPUT");
+UART1.txPinConfig.hideOutputInversion  = scripting.forceWrite(false);
+UART1.txPinConfig.onlyInternalResistor = scripting.forceWrite(false);
+UART1.txPinConfig.passedPeripheralType = scripting.forceWrite("Digital");
+UART1.txPinConfig.$name                = "ti_driverlib_gpio_GPIOPinGeneric_print_tx";
+UART1.rxPinConfig.hideOutputInversion  = scripting.forceWrite(false);
+UART1.rxPinConfig.onlyInternalResistor = scripting.forceWrite(false);
+UART1.rxPinConfig.passedPeripheralType = scripting.forceWrite("Digital");
+UART1.rxPinConfig.$name                = "ti_driverlib_gpio_GPIOPinGeneric_print_rx";
+
+const ProjectConfig              = scripting.addModule("/ti/project_config/ProjectConfig", {}, false);
+ProjectConfig.migrationCondition = true;

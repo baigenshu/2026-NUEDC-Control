@@ -21,10 +21,21 @@
 #define OLED_RES_LOW()  DL_GPIO_clearPins(OLED_RES_PORT, OLED_RES_PIN)
 #define OLED_RES_HIGH() DL_GPIO_setPins(OLED_RES_PORT, OLED_RES_PIN)
 
+/* Wait until shift complete, then drain RX (full-duplex) so FIFO never stalls */
+static void OLED_SPI_WaitDone(void)
+{
+    while (DL_SPI_isBusy(SPI_OLED_INST)) {
+    }
+    while (!DL_SPI_isRXFIFOEmpty(SPI_OLED_INST)) {
+        (void)DL_SPI_receiveData8(SPI_OLED_INST);
+    }
+}
+
 /* ---- Send one byte via SPI ---- */
 static void OLED_SPI_WriteByte(uint8_t data)
 {
     DL_SPI_transmitDataBlocking8(SPI_OLED_INST, data);
+    OLED_SPI_WaitDone();
 }
 
 static void OLED_WriteCommand(uint8_t cmd)

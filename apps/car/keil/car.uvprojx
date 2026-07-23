@@ -610,14 +610,19 @@
           <GroupName>Function</GroupName>
           <Files>
             <File>
-              <FileName>bsp_iic.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\src\Function\Src\bsp_iic.c</FilePath>
-            </File>
-            <File>
               <FileName>bsp_systick.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\src\Function\Src\bsp_systick.c</FilePath>
+            </File>
+            <File>
+              <FileName>uart_debug.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\src\Function\Src\uart_debug.c</FilePath>
+            </File>
+            <File>
+              <FileName>line_track.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\src\Function\Src\line_track.c</FilePath>
             </File>
             <File>
               <FileName>board.h</FileName>
@@ -625,14 +630,19 @@
               <FilePath>..\src\Function\Inc\board.h</FilePath>
             </File>
             <File>
-              <FileName>bsp_iic.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\src\Function\Inc\bsp_iic.h</FilePath>
-            </File>
-            <File>
               <FileName>bsp_systick.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\src\Function\Inc\bsp_systick.h</FilePath>
+            </File>
+            <File>
+              <FileName>uart_debug.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\src\Function\Inc\uart_debug.h</FilePath>
+            </File>
+            <File>
+              <FileName>line_track.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\src\Function\Inc\line_track.h</FilePath>
             </File>
           </Files>
         </Group>
@@ -648,11 +658,6 @@
               <FileName>grayscale_sensor.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\src\Hardware\Src\grayscale_sensor.c</FilePath>
-            </File>
-            <File>
-              <FileName>imu601.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\src\Hardware\Src\imu601.c</FilePath>
             </File>
             <File>
               <FileName>motor.c</FileName>
@@ -675,11 +680,6 @@
               <FilePath>..\src\Hardware\Inc\grayscale_sensor.h</FilePath>
             </File>
             <File>
-              <FileName>imu601.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\src\Hardware\Inc\imu601.h</FilePath>
-            </File>
-            <File>
               <FileName>motor.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\src\Hardware\Inc\motor.h</FilePath>
@@ -695,19 +695,9 @@
               <FilePath>..\src\Hardware\Src\pid.c</FilePath>
             </File>
             <File>
-              <FileName>straight_line.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\src\Hardware\Src\straight_line.c</FilePath>
-            </File>
-            <File>
               <FileName>pid.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\src\Hardware\Inc\pid.h</FilePath>
-            </File>
-            <File>
-              <FileName>straight_line.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\src\Hardware\Inc\straight_line.h</FilePath>
             </File>
             <File>
               <FileName>OLED_Font.h</FileName>

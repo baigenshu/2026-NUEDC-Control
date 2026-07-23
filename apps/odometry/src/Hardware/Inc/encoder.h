@@ -4,11 +4,9 @@
 #include <stdint.h>
 
 /*
- * EncA: hardware QEI TIMG8  PB6/PB7
- * EncB: GPIO both-edge IRQ  PB0/PB5
- *
- * MSPM0G3507 has only ONE QEI-capable timer (TIMG8).
- * Dual pure-QEI is not available on this silicon.
+ * Dual GPIO x4 quadrature (gray-code) — LQFP-48
+ *   EncA: PB6 / PB7
+ *   EncB: PB15 / PB16
  */
 
 extern volatile int32_t EncoderA_Count;

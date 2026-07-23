@@ -2,12 +2,16 @@
 #include "bsp_systick.h"
 
 /*
- * UART1 RX → DMA CH0 → ring buffer → main-loop frame parse
- * Chunk size 32B, re-arm on DMA_DONE_RX
+ * UART1 RX → DMA CH0 → ring → IMU601_Poll()
+ * 上电: 软复位 → 等稳定 → 校准 yaw → 等收敛 → 清缓冲
  */
 
 #define IMU_RING_SIZE   256u
 #define IMU_DMA_CHUNK   32u
+
+/* 校准后模块静止收敛时间 (ms) */
+#define IMU_RESET_WAIT_MS   800u
+#define IMU_CALI_WAIT_MS    1500u
 
 volatile IMU601_Attitude_t IMU601_Attitude;
 volatile uint32_t IMU601_FrameCount;
@@ -16,6 +20,14 @@ static uint8_t s_ring[IMU_RING_SIZE];
 static volatile uint16_t s_wr;
 static volatile uint16_t s_rd;
 static uint8_t s_dma_chunk[IMU_DMA_CHUNK];
+
+static const uint8_t IMU_CMD_RESET[] = {
+    0xAA, 0x55, 0x60, 0x12, 0x00, 0x72
+};
+/* 文档校准 yaw: AA 55 60 14 04 66 E6 B4 43 BB */
+static const uint8_t IMU_CMD_CALI[] = {
+    0xAA, 0x55, 0x60, 0x14, 0x04, 0x66, 0xE6, 0xB4, 0x43, 0xBB
+};
 
 static void uart_send(const uint8_t *buf, uint8_t len)
 {
@@ -33,13 +45,19 @@ static void dma_arm(void)
     DL_DMA_enableChannel(DMA, DMA_CH0_CHAN_ID);
 }
 
+static void ring_clear(void)
+{
+    s_wr = 0;
+    s_rd = 0;
+}
+
 static void ring_push(const uint8_t *p, uint16_t n)
 {
     uint16_t i;
     for (i = 0; i < n; i++) {
         uint16_t next = (uint16_t)((s_wr + 1u) % IMU_RING_SIZE);
         if (next == s_rd)
-            break; /* overrun: drop */
+            break;
         s_ring[s_wr] = p[i];
         s_wr = next;
     }
@@ -82,7 +100,6 @@ void IMU601_Poll(void)
         uint8_t i, sum;
         uint8_t frame[12];
 
-        /* hunt AA 55 */
         if (ring_peek(0) != 0xAAu || ring_peek(1) != 0x55u) {
             ring_drop(1);
             continue;
@@ -100,7 +117,7 @@ void IMU601_Poll(void)
             IMU601_FrameCount++;
             ring_drop(12);
         } else {
-            ring_drop(1); /* bad frame, resync */
+            ring_drop(1);
         }
     }
 }
@@ -117,17 +134,23 @@ void IMU601_INST_IRQHandler(void)
     }
 }
 
+void IMU601_Calibrate(void)
+{
+    /* 发送校准命令，模块须水平静止 */
+    uart_send(IMU_CMD_CALI, (uint8_t)sizeof(IMU_CMD_CALI));
+    delay_ms(IMU_CALI_WAIT_MS);
+
+    /* 丢掉校准过程中的旧帧，重新累计 */
+    ring_clear();
+    IMU601_FrameCount = 0;
+    IMU601_Attitude.yaw = 0.0f;
+    IMU601_Attitude.pitch = 0.0f;
+    IMU601_Attitude.roll = 0.0f;
+}
+
 void IMU601_Init(void)
 {
-    static const uint8_t IMU_reset[] = {
-        0xAA, 0x55, 0x60, 0x12, 0x00, 0x72
-    };
-    static const uint8_t IMU_cali[] = {
-        0xAA, 0x55, 0x60, 0x14, 0x04, 0x66, 0xE6, 0xB4, 0x43, 0xBB
-    };
-
-    s_wr = 0;
-    s_rd = 0;
+    ring_clear();
     IMU601_FrameCount = 0;
     IMU601_Attitude.yaw = 0.0f;
     IMU601_Attitude.pitch = 0.0f;
@@ -136,7 +159,10 @@ void IMU601_Init(void)
     NVIC_EnableIRQ(IMU601_INST_INT_IRQN);
     dma_arm();
 
-    uart_send(IMU_reset, (uint8_t)sizeof(IMU_reset));
-    delay_ms(500);
-    uart_send(IMU_cali, (uint8_t)sizeof(IMU_cali));
+    /* 1) 软复位 */
+    uart_send(IMU_CMD_RESET, (uint8_t)sizeof(IMU_CMD_RESET));
+    delay_ms(IMU_RESET_WAIT_MS);
+
+    /* 2) 每次上电都校准（静止） */
+    IMU601_Calibrate();
 }
