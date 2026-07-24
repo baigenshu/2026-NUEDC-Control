@@ -92,16 +92,12 @@
     <div class="detail">OLED SSD1306 · PB8/PB9/PB21</div>
   </div>
   <div class="summary-item">
-    <div class="iface"><span class="tag tag-pwm">TIMG0</span> 10kHz</div>
-    <div class="detail">Motor A TB6612 · PA12</div>
-  </div>
-  <div class="summary-item">
-    <div class="iface"><span class="tag tag-pwm">TIMG6</span> 10kHz</div>
-    <div class="detail">Motor B TB6612 · PA21</div>
+    <div class="iface"><span class="tag tag-pwm">TIMG0/6+TIMA0</span> 10kHz</div>
+    <div class="detail">Motor A/B/C/D · PA12/PA21/PA1/PA28</div>
   </div>
   <div class="summary-item">
     <div class="iface"><span class="tag tag-int">GPIOB_INT</span></div>
-    <div class="detail">编码器 A/B (4倍频正交)</div>
+    <div class="detail">编码器 A/B/C/D (4倍频正交)</div>
   </div>
   <div class="summary-item">
     <div class="iface"><span class="tag tag-gpio">GPIO</span> 8路输入</div>
@@ -114,20 +110,26 @@
 </div>
 
 <!-- ======================== 1. DC电机 ======================== -->
-<h2><span class="dot" style="background:var(--yellow)"></span> DC 电机驱动 — TB6612FNG (双路)</h2>
+<h2><span class="dot" style="background:var(--yellow)"></span> DC 电机驱动 — TB6612FNG / D24A (四路)</h2>
 <div class="card">
 <table>
 <thead>
 <tr><th>功能</th><th>MCU引脚</th><th>端口</th><th>PinCM</th><th>封装脚</th><th>类型</th><th>备注</th></tr>
 </thead>
 <tbody>
-<tr><td><strong>Motor A — PWM</strong></td><td class="pin-highlight">PA12</td><td>GPIOA</td><td>34</td><td>—</td><td><span class="tag tag-pwm">TIMG0_CCP0</span></td><td>10kHz，占空比调速</td></tr>
+<tr><td><strong>Motor A — PWM</strong></td><td class="pin-highlight">PA12</td><td>GPIOA</td><td>34</td><td>—</td><td><span class="tag tag-pwm">TIMG0_CCP0</span></td><td>10kHz（板上常见引出）</td></tr>
 <tr><td><strong>Motor A — AIN1</strong></td><td class="pin-highlight">PB13</td><td>GPIOB</td><td>30</td><td>1</td><td><span class="tag tag-gpio">DOUT</span></td><td>方向 IN1</td></tr>
 <tr><td><strong>Motor A — AIN2</strong></td><td class="pin-highlight">PB15</td><td>GPIOB</td><td>32</td><td>3</td><td><span class="tag tag-gpio">DOUT</span></td><td>方向 IN2</td></tr>
-<tr><td><strong>Motor B — PWM</strong></td><td class="pin-highlight">PA21</td><td>GPIOA</td><td>46</td><td>—</td><td><span class="tag tag-pwm">TIMG6_CCP0</span></td><td>10kHz，占空比调速</td></tr>
+<tr><td><strong>Motor B — PWM</strong></td><td class="pin-highlight">PA21</td><td>GPIOA</td><td>46</td><td>—</td><td><span class="tag tag-pwm">TIMG6_CCP0</span></td><td>10kHz（板上常见引出）</td></tr>
 <tr><td><strong>Motor B — BIN1</strong></td><td class="pin-highlight">PB4</td><td>GPIOB</td><td>17</td><td>52</td><td><span class="tag tag-gpio">DOUT</span></td><td>方向 IN1</td></tr>
 <tr><td><strong>Motor B — BIN2</strong></td><td class="pin-highlight">PB6</td><td>GPIOB</td><td>23</td><td>58</td><td><span class="tag tag-gpio">DOUT</span></td><td>方向 IN2</td></tr>
-<tr><td><strong>STBY</strong></td><td class="pin-highlight">PB16</td><td>GPIOB</td><td>33</td><td>4</td><td><span class="tag tag-gpio">DOUT</span></td><td>H=使能 L=休眠</td></tr>
+<tr><td><strong>Motor C — PWM</strong></td><td class="pin-highlight">PA1</td><td>GPIOA</td><td>2</td><td>—</td><td><span class="tag tag-pwm">TIMA0_CCP1</span></td><td>10kHz</td></tr>
+<tr><td><strong>Motor C — CIN1</strong></td><td class="pin-highlight">PB1</td><td>GPIOB</td><td>13</td><td>—</td><td><span class="tag tag-gpio">DOUT</span></td><td>方向 IN1</td></tr>
+<tr><td><strong>Motor C — CIN2</strong></td><td class="pin-highlight">PB2</td><td>GPIOB</td><td>15</td><td>—</td><td><span class="tag tag-gpio">DOUT</span></td><td>方向 IN2</td></tr>
+<tr><td><strong>Motor D — PWM</strong></td><td class="pin-highlight">PA28</td><td>GPIOA</td><td>3</td><td>—</td><td><span class="tag tag-pwm">TIMA0_CCP3</span></td><td>10kHz</td></tr>
+<tr><td><strong>Motor D — DIN1</strong></td><td class="pin-highlight">PB3</td><td>GPIOB</td><td>16</td><td>—</td><td><span class="tag tag-gpio">DOUT</span></td><td>方向 IN1</td></tr>
+<tr><td><strong>Motor D — DIN2</strong></td><td class="pin-highlight">PB7</td><td>GPIOB</td><td>24</td><td>—</td><td><span class="tag tag-gpio">DOUT</span></td><td>方向 IN2</td></tr>
+<tr><td><strong>STBY</strong></td><td class="pin-highlight">PB16</td><td>GPIOB</td><td>33</td><td>4</td><td><span class="tag tag-gpio">DOUT</span></td><td>H=使能（D24A也可跳线帽接3V3）</td></tr>
 </tbody>
 </table>
 </div>
@@ -136,7 +138,7 @@
 </p>
 
 <!-- ======================== 2. 霍尔编码器 ======================== -->
-<h2><span class="dot" style="background:var(--pink)"></span> 霍尔编码器 (双路)</h2>
+<h2><span class="dot" style="background:var(--pink)"></span> 霍尔编码器 (四路)</h2>
 <div class="card">
 <table>
 <thead>
@@ -147,11 +149,15 @@
 <tr><td><strong>Encoder A — E1B</strong></td><td class="pin-highlight">PB5</td><td>GPIOB</td><td>18</td><td>53</td><td><span class="tag tag-int">GPIO_INT</span></td><td>双边沿触发</td></tr>
 <tr><td><strong>Encoder B — E2A</strong></td><td class="pin-highlight">PB23</td><td>GPIOB</td><td>51</td><td>22</td><td><span class="tag tag-int">GPIO_INT</span></td><td>双边沿触发</td></tr>
 <tr><td><strong>Encoder B — E2B</strong></td><td class="pin-highlight">PB18</td><td>GPIOB</td><td>44</td><td>15</td><td><span class="tag tag-int">GPIO_INT</span></td><td>双边沿触发</td></tr>
+<tr><td><strong>Encoder C — E3A</strong></td><td class="pin-highlight">PB27</td><td>GPIOB</td><td>58</td><td>—</td><td><span class="tag tag-int">GPIO_INT</span></td><td>双边沿触发</td></tr>
+<tr><td><strong>Encoder C — E3B</strong></td><td class="pin-highlight">PB22</td><td>GPIOB</td><td>50</td><td>—</td><td><span class="tag tag-int">GPIO_INT</span></td><td>双边沿触发</td></tr>
+<tr><td><strong>Encoder D — E4A</strong></td><td class="pin-highlight">PB24</td><td>GPIOB</td><td>52</td><td>—</td><td><span class="tag tag-int">GPIO_INT</span></td><td>双边沿触发</td></tr>
+<tr><td><strong>Encoder D — E4B</strong></td><td class="pin-highlight">PB26</td><td>GPIOB</td><td>57</td><td>—</td><td><span class="tag tag-int">GPIO_INT</span></td><td>双边沿触发</td></tr>
 </tbody>
 </table>
 </div>
 <p style="font-size:0.85rem;color:var(--muted);margin:-12px 0 0 4px;">
-  🔄 四倍频正交解码（双边沿），由 <code>GROUP1_IRQHandler</code> 统一处理全部 GPIOB 中断
+  🔄 四倍频正交解码（双边沿），由 <code>GROUP1_IRQHandler</code> 统一处理 A/B/C/D 全部 GPIOB 中断
 </p>
 
 <!-- ======================== 3. OLED ======================== -->

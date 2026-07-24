@@ -625,9 +625,29 @@
               <FilePath>..\src\Function\Src\line_track.c</FilePath>
             </File>
             <File>
+              <FileName>chassis.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\src\Function\Src\chassis.c</FilePath>
+            </File>
+            <File>
+              <FileName>go_straight.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\src\Function\Src\go_straight.c</FilePath>
+            </File>
+            <File>
               <FileName>board.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\src\Function\Inc\board.h</FilePath>
+            </File>
+            <File>
+              <FileName>chassis.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\src\Function\Inc\chassis.h</FilePath>
+            </File>
+            <File>
+              <FileName>go_straight.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\src\Function\Inc\go_straight.h</FilePath>
             </File>
             <File>
               <FileName>bsp_systick.h</FileName>

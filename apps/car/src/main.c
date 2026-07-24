@@ -1,50 +1,66 @@
 #include "ti_msp_dl_config.h"
 #include "motor.h"
-#include "bsp_systick.h"
 #include "encoder.h"
+#include "chassis.h"
 #include "line_track.h"
-#include "uart_debug.h"
+#include "OLED.h"
+#include "bsp_systick.h"
 
-#define CONTROL_MS   10
-#define LOG_EVERY_N  5
+/*
+ * 四轮循迹
+ *   左前C 右前B | 左后D 右后A
+ *   8 路灰度: S1(左) … S8(右)
+ *
+ * 周期 15ms 调用 LineTrack_Step
+ */
+#define CTRL_MS     15
+#define BASE_SPD    15
 
-static void System_Init(void)
+static void ui_show(const LineTrack_Status_t *st)
 {
-    SYSCFG_DL_init();
-    UartDebug_Init();
-    Motor_Init();
-    Encoder_Init();
-    LineTrack_Init();
+    OLED_ShowString(1, 1, "Track");
+    OLED_ShowString(1, 7, st->lost ? "LOST" : (st->hard_corner ? "CORN" : " OK "));
 
-    UartDebug_Write("\r\n[car] line track ready\r\n");
-    delay_ms(500);
+    OLED_ShowString(2, 1, "L:");
+    OLED_ShowSignedNum(2, 3, st->left_cmd, 3);
+    OLED_ShowString(2, 8, "R:");
+    OLED_ShowSignedNum(2, 10, st->right_cmd, 3);
+
+    OLED_ShowString(3, 1, "E:");
+    OLED_ShowSignedNum(3, 3, st->error, 5);
+
+    OLED_ShowString(4, 1, "S:");
+    OLED_ShowHexNum(4, 3, st->sensors, 2);
 }
 
 int main(void)
 {
-    uint32_t n = 0;
     LineTrack_Status_t st;
+    uint32_t ui_div = 0;
 
-    System_Init();
+    SYSCFG_DL_init();
+    OLED_Init();
+    OLED_Clear();
+    OLED_ShowString(1, 1, "Line Track");
+    delay_ms(500);
+
+    Motor_Init();
+    Encoder_Init();
+    Chassis_Init();
+    LineTrack_Init();
+    LineTrack_SetBaseSpeed(BASE_SPD);
+    Encoder_AllReset();
+    OLED_Clear();
 
     while (1) {
         LineTrack_Step(&st);
 
-        if ((n % LOG_EVERY_N) == 0u) {
-            long spL = (long)EncoderB_Speed;
-            long spR = (long)EncoderA_Speed;
-            if (spL < 0) spL = -spL;
-            if (spR < 0) spR = -spR;
-
-            UartDebug_Printf(
-                "L=%d R=%d | S=%02X E=%d side=%d lost=%u hard=%u | spd %ld/%ld\r\n",
-                (int)st.left_cmd, (int)st.right_cmd,
-                st.sensors, (int)st.error, (int)st.last_side,
-                (unsigned)st.lost, (unsigned)st.hard_corner,
-                spL, spR);
+        /* OLED 稍慢刷新，少占控制时间 */
+        if (++ui_div >= 4U) {
+            ui_div = 0;
+            ui_show(&st);
         }
 
-        n++;
-        delay_ms(CONTROL_MS);
+        delay_ms(CTRL_MS);
     }
 }
