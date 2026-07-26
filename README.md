@@ -67,10 +67,16 @@ GCC 也可使用本机 SDK 路径；Keil 固定用仓库内 Source/，便于双�
 
 ## MaixCAM 视觉模块
 
-目录：apps/maixcam/
+目录：apps/maixcam/（子目录分应用）
 
-- 入口脚本：urat.py（部署到 MaixCAM 运行）
-- 说明见 apps/maixcam/README.md
+| 子目录 | 说明 |
+|--------|------|
+| `collect/` | 检测数据集采样 |
+| `detect_ball/` | 钢珠 YOLO 检测 |
+| `red_track/` | 红目标 + IMU 串口跟踪 |
+| `tools/` | PC 串口测试工具 |
+
+说明见 apps/maixcam/README.md
 
 ## 注意
 

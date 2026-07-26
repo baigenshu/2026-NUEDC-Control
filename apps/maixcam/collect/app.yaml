@@ -1,0 +1,14 @@
+id: detect_collect
+name: Detect Collect
+name[zh]: 检测集采样
+version: 1.1.0
+author: line_tracker_car
+desc: Collect train/val images for MaixHub detection
+desc[zh]: 采集检测 train/val 图，框选在 MaixHub 完成
+exclude:
+  - .vscode
+  - dist
+  - __pycache__
+files:
+  - app.yaml
+  - main.py
