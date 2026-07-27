@@ -1,6 +1,13 @@
-# Build outputs
-build/
-**/build/
+# ===== MSPM0 子工程本地/生成物（apps 下各工程）=====
+apps/**/Makefile
+apps/**/mspm0.project.json
+apps/**/toolpaths.mk
+apps/**/toolpath.mk
+apps/**/linker/
+apps/**/build/
+apps/**/.vscode/
+
+# Build artifacts
 *.o
 *.d
 *.out
@@ -9,15 +16,7 @@ build/
 *.elf
 *.bin
 
-# Local tool path cache (re-generate via MSPM0 Toolkit 同步配置)
-toolpaths.mk
-**/toolpaths.mk
-
-# VS Code generated / machine-local (extension regenerates)
-.vscode/
-**/.vscode/
-
-# Keil legacy leftovers
+# Keil leftovers
 **/keil/Objects/
 **/keil/Listings/
 **/keil/*.uvguix*
@@ -27,6 +26,9 @@ toolpaths.mk
 *.axf
 *.lnp
 *.bak
+
+# PlatformIO
+**/.pio/
 
 # Python
 __pycache__/
@@ -38,3 +40,4 @@ Thumbs.db
 *.log
 .tmp/
 .claude/
+**/.claude/
