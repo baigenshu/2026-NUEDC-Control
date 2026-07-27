@@ -3,8 +3,8 @@ name: Steel Ball Detect
 name[zh]: 钢珠检测
 version: 1.0.0
 author: line_tracker_car
-desc: YOLOv5 steel ball detector (MaixHub 302745)
-desc[zh]: 钢珠检测（MaixHub 任务 302745）
+desc: YOLOv8 steel ball detector
+desc[zh]: 钢珠检测（YOLOv8）
 exclude:
   - .vscode
   - dist
@@ -13,5 +13,5 @@ exclude:
 files:
   - app.yaml
   - main.py
-  - model_302745.mud
-  - model_302745.cvimodel
+  - steel_ball.mud
+  - steel_ball_int8.cvimodel

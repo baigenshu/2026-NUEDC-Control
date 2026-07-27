@@ -23,4 +23,4 @@ apps/maixcam/
 
 - 模型文件较大，`detect_ball` 需把 mud/cvimodel 一并上传
 - 也可只放到 `/root/models/`，`detect_ball/main.py` 会自动查找
-- SSH：`root@192.168.137.221`，密码 `root`（USB 共享网络时）
+- SSH：`root@ip`，密码 `root`

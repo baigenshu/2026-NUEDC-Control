@@ -1,5 +1,5 @@
 """
-钢珠 YOLOv5 检测（MaixHub 任务 302745）
+钢珠 YOLOv8 检测
 模型与 main.py 同目录，或 /root/models/
 """
 
@@ -24,16 +24,15 @@ DISPLAY_NAMES_ZH = {
 def find_model():
     here = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else "."
     candidates = [
-        os.path.join(here, "model_302745.mud"),
-        "model_302745.mud",
-        "/root/models/model_302745.mud",
-        "/root/detect_ball/model_302745.mud",
-        "/root/models/maixhub/302745/model_302745.mud",
+        os.path.join(here, "steel_ball.mud"),
+        "steel_ball.mud",
+        "/root/models/steel_ball.mud",
+        "/root/detect_ball/steel_ball.mud",
     ]
     for p in candidates:
         if os.path.exists(p):
             return p
-    raise FileNotFoundError("model_302745.mud not found")
+    raise FileNotFoundError("steel_ball.mud not found")
 
 
 def setup_font():
@@ -70,7 +69,7 @@ def main():
     use_zh = setup_font()
     model_path = find_model()
     print("load:", model_path)
-    detector = nn.YOLOv5(model=model_path, dual_buff=True)
+    detector = nn.YOLOv8(model=model_path, dual_buff=True)
     print("input:", detector.input_width(), detector.input_height(), detector.input_format())
     print("labels:", detector.labels)
 
