@@ -2,11 +2,20 @@
 #include "chassis.h"
 #include "pid.h"
 
-/* 直线差速 PID（作用在 左累计-右累计） */
-#define GS_KP       0.06f
+/*
+ * 编码器差速闭环走直线（支持正负基准速度）
+ * 保证两侧都有足够最小 PWM，避免一侧被压到几乎不转
+ */
+#define GS_KP       0.12f
 #define GS_KI       0.000f
-#define GS_KD       0.01f
-#define GS_OUT_MAX  8.0f
+#define GS_KD       0.04f
+#define GS_OUT_MAX  5.0f
+
+/* 1：左超前 → 减速左；若越纠越偏改为 -1 */
+#define ENC_ERR_SIGN  (1)
+
+/* 轻微开环偏置，正值=略加强右指令侧 */
+#define SIDE_BIAS   2
 
 #define PWM_MIN    (-100)
 #define PWM_MAX    (100)
@@ -15,6 +24,8 @@ static PID_t s_pid;
 static GoStraight_Status_t s_st;
 static int32_t s_base_left;
 static int32_t s_base_right;
+static int32_t s_prev_left;
+static int32_t s_prev_right;
 
 static int16_t clamp_pwm(int16_t v)
 {
@@ -25,6 +36,17 @@ static int16_t clamp_pwm(int16_t v)
         return PWM_MIN;
     }
     return v;
+}
+
+static int16_t clamp_base(int16_t base_speed)
+{
+    if (base_speed > 100) {
+        return 100;
+    }
+    if (base_speed < -100) {
+        return -100;
+    }
+    return base_speed;
 }
 
 void GoStraight_Init(void)
@@ -39,22 +61,21 @@ void GoStraight_Init(void)
     s_st.running = 0;
     s_base_left = 0;
     s_base_right = 0;
+    s_prev_left = 0;
+    s_prev_right = 0;
 }
 
 void GoStraight_Start(int16_t base_speed)
 {
-    if (base_speed < 0) {
-        base_speed = 0;
-    }
-    if (base_speed > 100) {
-        base_speed = 100;
-    }
+    base_speed = clamp_base(base_speed);
 
     PID_Reset(&s_pid);
     s_pid.target = 0.0f;
 
     s_base_left = Chassis_GetLeftCount();
     s_base_right = Chassis_GetRightCount();
+    s_prev_left = 0;
+    s_prev_right = 0;
 
     s_st.base = base_speed;
     s_st.left_cnt = 0;
@@ -65,55 +86,62 @@ void GoStraight_Start(int16_t base_speed)
 
 void GoStraight_SetSpeed(int16_t base_speed)
 {
-    if (base_speed < 0) {
-        base_speed = 0;
-    }
-    if (base_speed > 100) {
-        base_speed = 100;
-    }
-    s_st.base = base_speed;
+    s_st.base = clamp_base(base_speed);
 }
 
 void GoStraight_Step(void)
 {
     int32_t left_cnt;
     int32_t right_cnt;
+    int32_t d_left;
+    int32_t d_right;
     int32_t err;
     float corr;
     int16_t left_pwm;
     int16_t right_pwm;
-    int16_t min_fwd;
+    int16_t min_mag;
     int16_t base;
+    int16_t base_abs;
 
     if (!s_st.running) {
         return;
     }
 
     base = s_st.base;
+    base_abs = (base >= 0) ? base : (int16_t)(-base);
+
     left_cnt = Chassis_GetLeftCount() - s_base_left;
     right_cnt = Chassis_GetRightCount() - s_base_right;
-    err = left_cnt - right_cnt;
 
-    /*
-     * target=0, feedback=err → corr = K*(0-err) = -K*err
-     * 左超前 err>0 → corr<0 → 左减速、右加速
-     */
+    d_left = left_cnt - s_prev_left;
+    d_right = right_cnt - s_prev_right;
+    s_prev_left = left_cnt;
+    s_prev_right = right_cnt;
+
+    err = (int32_t)ENC_ERR_SIGN * (d_left - d_right);
     corr = PID_CalcLinear(&s_pid, (float)err);
 
-    left_pwm = (int16_t)((float)base + corr);
-    right_pwm = (int16_t)((float)base - corr);
+    left_pwm = (int16_t)((float)base + corr - (float)SIDE_BIAS);
+    right_pwm = (int16_t)((float)base - corr + (float)SIDE_BIAS);
 
-    /* 前进时两侧禁止倒转，避免原地打转 */
-    min_fwd = (int16_t)(base / 3);
-    if (min_fwd < 3) {
-        min_fwd = 3;
+    /* 两侧至少 |base|*70%，防止一侧几乎不转 */
+    min_mag = (int16_t)((base_abs * 7) / 10);
+    if (min_mag < 8) {
+        min_mag = 8;
     }
     if (base > 0) {
-        if (left_pwm < min_fwd) {
-            left_pwm = min_fwd;
+        if (left_pwm < min_mag) {
+            left_pwm = min_mag;
         }
-        if (right_pwm < min_fwd) {
-            right_pwm = min_fwd;
+        if (right_pwm < min_mag) {
+            right_pwm = min_mag;
+        }
+    } else if (base < 0) {
+        if (left_pwm > -min_mag) {
+            left_pwm = (int16_t)(-min_mag);
+        }
+        if (right_pwm > -min_mag) {
+            right_pwm = (int16_t)(-min_mag);
         }
     }
 

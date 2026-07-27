@@ -8,12 +8,8 @@
 #define POL_C   (+1)  /* 左前 */
 #define POL_D   (-1)  /* 左后 */
 
-/* 开环左右配平（%）：右轮偏快则降 RIGHT_TRIM */
-#define LEFT_TRIM    100
-#define RIGHT_TRIM    85
-
-#define PWM_MIN    (-100)
-#define PWM_MAX    (100)
+#define PWM_MIN  (-100)
+#define PWM_MAX  (100)
 
 static Chassis_Status_t s_st;
 
@@ -39,13 +35,7 @@ static int16_t apply_trim(int16_t cmd, int trim_pct)
     return clamp_pwm((int16_t)v);
 }
 
-void Chassis_Init(void)
-{
-    s_st.left_cmd = 0;
-    s_st.right_cmd = 0;
-}
-
-void Chassis_Drive(int16_t left, int16_t right)
+static void drive4(int16_t left, int16_t right, int use_trim)
 {
     int16_t l_out;
     int16_t r_out;
@@ -53,8 +43,13 @@ void Chassis_Drive(int16_t left, int16_t right)
     left = clamp_pwm(left);
     right = clamp_pwm(right);
 
-    l_out = apply_trim(left, LEFT_TRIM);
-    r_out = apply_trim(right, RIGHT_TRIM);
+    if (use_trim) {
+        l_out = apply_trim(left, ROBOT_LEFT_TRIM);
+        r_out = apply_trim(right, ROBOT_RIGHT_TRIM);
+    } else {
+        l_out = left;
+        r_out = right;
+    }
 
     MotorC_SetSpeed(apply_pol(l_out, POL_C));
     MotorD_SetSpeed(apply_pol(l_out, POL_D));
@@ -65,6 +60,12 @@ void Chassis_Drive(int16_t left, int16_t right)
     s_st.right_cmd = r_out;
 }
 
+void Chassis_Init(void)
+{
+    s_st.left_cmd = 0;
+    s_st.right_cmd = 0;
+}
+
 void Chassis_Stop(void)
 {
     Motor_AllStop();
@@ -72,60 +73,71 @@ void Chassis_Stop(void)
     s_st.right_cmd = 0;
 }
 
+void Chassis_Drive(int16_t left, int16_t right)
+{
+    drive4(left, right, 1);
+}
+
+void Chassis_SpinLeft(int16_t speed)
+{
+    int16_t spd = clamp_pwm(speed);
+
+    if (spd < 0) {
+        spd = (int16_t)(-spd);
+    }
+    /* 左退右进，四轮等速，不配平 */
+    drive4((int16_t)(-spd), spd, 0);
+}
+
+void Chassis_SpinRight(int16_t speed)
+{
+    int16_t spd = clamp_pwm(speed);
+
+    if (spd < 0) {
+        spd = (int16_t)(-spd);
+    }
+    drive4(spd, (int16_t)(-spd), 0);
+}
+
 void Chassis_TurnLeft(int16_t base, int16_t turn)
 {
-    int16_t left;
-    int16_t right;
+    int16_t spd = (int16_t)(base + turn);
 
-    if (base < 0) {
-        base = 0;
+    if (spd < 0) {
+        spd = 0;
     }
-    if (base > 100) {
-        base = 100;
+    if (spd > 100) {
+        spd = 100;
     }
-    if (turn < 0) {
-        turn = 0;
-    }
-    if (turn > 100) {
-        turn = 100;
-    }
-
-    left = (int16_t)(base - turn);
-    right = (int16_t)(base + (turn / 2));
-    Chassis_Drive(left, right);
+    Chassis_SpinLeft(spd);
 }
 
 void Chassis_TurnRight(int16_t base, int16_t turn)
 {
-    int16_t left;
-    int16_t right;
+    int16_t spd = (int16_t)(base + turn);
 
-    if (base < 0) {
-        base = 0;
+    if (spd < 0) {
+        spd = 0;
     }
-    if (base > 100) {
-        base = 100;
+    if (spd > 100) {
+        spd = 100;
     }
-    if (turn < 0) {
-        turn = 0;
-    }
-    if (turn > 100) {
-        turn = 100;
-    }
-
-    left = (int16_t)(base + (turn / 2));
-    right = (int16_t)(base - turn);
-    Chassis_Drive(left, right);
+    Chassis_SpinRight(spd);
 }
 
+/*
+ * 与 drive4 电机极性一致：后轮机械镜像，编码器原始方向相反。
+ * 直接 C+D / B+A 会正负抵消 → 航向/路程恒约 0 → 定角永不停止。
+ * 正方向 = 车体前进时该侧累计增加。
+ */
 int32_t Chassis_GetLeftCount(void)
 {
-    return EncoderC_Count + EncoderD_Count;
+    return (int32_t)(POL_C) * EncoderC_Count + (int32_t)(POL_D) * EncoderD_Count;
 }
 
 int32_t Chassis_GetRightCount(void)
 {
-    return EncoderB_Count + EncoderA_Count;
+    return (int32_t)(POL_B) * EncoderB_Count + (int32_t)(POL_A) * EncoderA_Count;
 }
 
 const Chassis_Status_t *Chassis_GetStatus(void)

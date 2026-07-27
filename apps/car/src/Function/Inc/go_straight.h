@@ -30,7 +30,7 @@ typedef struct {
 
 void GoStraight_Init(void);
 
-/* 设定基准速度并清零相对编码器，开始走直线 */
+/* 设定基准速度并清零相对编码器，开始走直线；base 可负（后退） */
 void GoStraight_Start(int16_t base_speed);
 
 /* 控制周期内调用一次；未 Start 时无动作 */

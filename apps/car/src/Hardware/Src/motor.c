@@ -23,8 +23,8 @@
 #define M_PWMD_FUNC         IOMUX_PINCM47_PF_TIMA0_CCP1
 #define M_PWMD_CC           DL_TIMER_CC_1_INDEX
 
-/* C/D 偏弱，指令放大 2.2 倍，再限幅到 100 */
-#define CD_GAIN_NUM         22U
+/* C/D 与 A/B 同指令 */
+#define CD_GAIN_NUM         10U
 #define CD_GAIN_DEN         10U
 
 static uint16_t duty_of(uint16_t speed)

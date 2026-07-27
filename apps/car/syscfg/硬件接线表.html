@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MSPM0G3507 硬件接线表 — 电赛项目</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --border: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --green: #4ade80;
+    --yellow: #facc15;
+    --red: #f87171;
+    --purple: #c084fc;
+    --pink: #f472b6;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+  .container { max-width:1200px; margin:0 auto; padding:24px 16px; }
+  h1 {
+    font-size: 2rem; font-weight: 700; margin-bottom: 4px;
+    background: linear-gradient(135deg, var(--accent), var(--purple));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  h2 {
+    font-size: 1.25rem; font-weight: 600; margin: 32px 0 12px;
+    padding-bottom: 6px; border-bottom: 2px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+  }
+  h2 .dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+  .subtitle { color: var(--muted); margin-bottom: 24px; font-size: 0.95rem; }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px; margin-bottom: 20px;
+    overflow-x: auto;
+  }
+  table { width:100%; border-collapse:collapse; font-size: 0.9rem; }
+  th, td { padding: 10px 12px; text-align: left; white-space: nowrap; }
+  th { color: var(--muted); font-weight:600; font-size:0.8rem; text-transform:uppercase; letter-spacing:0.05em; border-bottom:1px solid var(--border); }
+  td { border-bottom: 1px solid rgba(51,65,85,0.5); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+  code {
+    background: rgba(56,189,248,0.12); color: var(--accent);
+    padding: 2px 6px; border-radius: 4px; font-size: 0.85em;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+  }
+  .tag {
+    display: inline-block; padding: 2px 8px; border-radius: 6px;
+    font-size: 0.75rem; font-weight: 600; letter-spacing: 0.02em;
+  }
+  .tag-spi  { background: rgba(56,189,248,0.18); color: var(--accent); }
+  .tag-pwm  { background: rgba(250,204,21,0.18); color: var(--yellow); }
+  .tag-gpio { background: rgba(148,163,184,0.18); color: var(--muted); }
+  .tag-int  { background: rgba(244,114,182,0.18); color: var(--pink); }
+  .tag-uart { background: rgba(45,212,191,0.18); color: #2dd4bf; }
+  .tag-mod  { background: rgba(74,222,128,0.18); color: var(--green); }
+  .pin-highlight { color: var(--yellow); font-weight: 700; }
+  .summary-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 12px; margin-bottom: 20px;
+  }
+  .summary-item {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 18px;
+  }
+  .summary-item .iface { font-weight: 700; color: var(--accent); font-size: 1.05rem; }
+  .summary-item .detail { color: var(--muted); font-size: 0.85rem; margin-top: 2px; }
+  .legacy { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 40px; padding-top: 16px; text-align: center; }
+  .legacy a { color: var(--accent); }
+  .note { font-size:0.85rem; color:var(--muted); margin:-12px 0 0 4px; }
+  .layout {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px; max-width: 360px;
+    margin: 8px 0 4px; font-family: 'Cascadia Code', monospace; font-size: 0.9rem;
+  }
+  .layout div {
+    background: rgba(56,189,248,0.08); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>MSPM0G3507 硬件接线表</h1>
+<p class="subtitle">电赛项目 · 主控 MSPM0G3507 (LQFP-64) · 80MHz · car 工程 · 四轮底盘</p>
+
+<!-- ======================== 接口汇总 ======================== -->
+<div class="summary-grid">
+  <div class="summary-item">
+    <div class="iface"><span class="tag tag-spi">SPI1</span> 20MHz</div>
+    <div class="detail">OLED SSD1306 · PB8/PB9/PB21 + CS/DC/RES</div>
+  </div>
+  <div class="summary-item">
+    <div class="iface"><span class="tag tag-pwm">TIMG0 / TIMG6 / TIMA0</span></div>
+    <div class="detail">Motor A/B/C/D · PA12 / PA21 / PA13 / PA22</div>
+  </div>
+  <div class="summary-item">
+    <div class="iface"><span class="tag tag-int">GPIOB_INT</span></div>
+    <div class="detail">编码器 A/B/C/D · 四倍频正交</div>
+  </div>
+  <div class="summary-item">
+    <div class="iface"><span class="tag tag-gpio">GPIO</span> 8路输入</div>
+    <div class="detail">灰度巡线 S1~S8</div>
+  </div>
+  <div class="summary-item">
+    <div class="iface"><span class="tag tag-uart">UART0</span> 115200</div>
+    <div class="detail">调试串口 · PA10(TX)/PA11(RX)</div>
+  </div>
+  <div class="summary-item">
+    <div class="iface"><span class="tag tag-mod">软件模块</span></div>
+    <div class="detail">chassis / go_straight / line_track</div>
+  </div>
+</div>
+
+<!-- ======================== 轮位 ======================== -->
+<h2><span class="dot" style="background:var(--green)"></span> 车体轮位映射（chassis）</h2>
+<div class="card">
+  <div class="layout">
+    <div>左前 <strong>C</strong><br><code>MotorC</code> EncC</div>
+    <div>右前 <strong>B</strong><br><code>MotorB</code> EncB</div>
+    <div>左后 <strong>D</strong><br><code>MotorD</code> EncD</div>
+    <div>右后 <strong>A</strong><br><code>MotorA</code> EncA</div>
+  </div>
+  <p style="margin-top:12px;color:var(--muted);font-size:0.9rem;">
+    左侧 = C + D &nbsp;|&nbsp; 右侧 = B + A<br>
+    极性（软件 <code>chassis.c</code>）：A/D 后轮 <code>POL = -1</code>（机械镜像），B/C 前轮 <code>+1</code><br>
+    左右配平：<code>LEFT_TRIM</code> / <code>RIGHT_TRIM</code>（默认 92 / 100）
+  </p>
+</div>
+
+<!-- ======================== 1. DC电机 ======================== -->
+<h2><span class="dot" style="background:var(--yellow)"></span> DC 电机驱动 — TB6612 / D24A (四路)</h2>
+<div class="card">
+<table>
+<thead>
+<tr><th>功能</th><th>MCU引脚</th><th>端口</th><th>PinCM</th><th>类型</th><th>备注</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Motor A — PWM</strong></td><td class="pin-highlight">PA12</td><td>GPIOA</td><td>34</td><td><span class="tag tag-pwm">TIMG0_CCP0</span></td><td>右后 · SysConfig PWMA</td></tr>
+<tr><td><strong>Motor A — AIN1</strong></td><td class="pin-highlight">PB13</td><td>GPIOB</td><td>30</td><td><span class="tag tag-gpio">DOUT</span></td><td>方向 IN1</td></tr>
+<tr><td><strong>Motor A — AIN2</strong></td><td class="pin-highlight">PB15</td><td>GPIOB</td><td>32</td><td><span class="tag tag-gpio">DOUT</span></td><td>方向 IN2</td></tr>
+<tr><td><strong>Motor B — PWM</strong></td><td class="pin-highlight">PA21</td><td>GPIOA</td><td>46</td><td><span class="tag tag-pwm">TIMG6_CCP0</span></td><td>右前 · SysConfig PWMB</td></tr>
+<tr><td><strong>Motor B — BIN1</strong></td><td class="pin-highlight">PB4</td><td>GPIOB</td><td>17</td><td><span class="tag tag-gpio">DOUT</span></td><td>方向 IN1</td></tr>
+<tr><td><strong>Motor B — BIN2</strong></td><td class="pin-highlight">PB6</td><td>GPIOB</td><td>23</td><td><span class="tag tag-gpio">DOUT</span></td><td>方向 IN2</td></tr>
+<tr><td><strong>Motor C — PWM</strong></td><td class="pin-highlight">PA13</td><td>GPIOA</td><td>35</td><td><span class="tag tag-pwm">TIMA0_CCP3_CMPL</span></td><td>左前 · motor.c 手配（非 syscfg PA1）</td></tr>
+<tr><td><strong>Motor C — CIN1</strong></td><td class="pin-highlight">PB1</td><td>GPIOB</td><td>13</td><td><span class="tag tag-gpio">DOUT</span></td><td>方向 IN1</td></tr>
+<tr><td><strong>Motor C — CIN2</strong></td><td class="pin-highlight">PB2</td><td>GPIOB</td><td>15</td><td><span class="tag tag-gpio">DOUT</span></td><td>方向 IN2</td></tr>
+<tr><td><strong>Motor D — PWM</strong></td><td class="pin-highlight">PA22</td><td>GPIOA</td><td>47</td><td><span class="tag tag-pwm">TIMA0_CCP1</span></td><td>左后 · motor.c 手配（非 syscfg PA28）</td></tr>
+<tr><td><strong>Motor D — DIN1</strong></td><td class="pin-highlight">PB3</td><td>GPIOB</td><td>16</td><td><span class="tag tag-gpio">DOUT</span></td><td>方向 IN1</td></tr>
+<tr><td><strong>Motor D — DIN2</strong></td><td class="pin-highlight">PB7</td><td>GPIOB</td><td>24</td><td><span class="tag tag-gpio">DOUT</span></td><td>方向 IN2</td></tr>
+<tr><td><strong>STBY</strong></td><td class="pin-highlight">PB16</td><td>GPIOB</td><td>33</td><td><span class="tag tag-gpio">DOUT</span></td><td>H=使能</td></tr>
+</tbody>
+</table>
+</div>
+<p class="note">
+  控制逻辑：IN1=L / IN2=H → 正转 &nbsp;|&nbsp; IN1=H / IN2=L → 反转 &nbsp;|&nbsp; STBY=0 待机<br>
+  注意：SysConfig 里 PWMC/PWMD 仍为 PA1/PA28，<strong>实际 C/D 以 <code>motor.c</code> 为准（PA13/PA22）</strong>；C 使用 TIMA0 互补输出 CMPL，软件内做了占空反算与 CD_GAIN 补强
+</p>
+
+<!-- ======================== 2. 霍尔编码器 ======================== -->
+<h2><span class="dot" style="background:var(--pink)"></span> 霍尔编码器 (四路 · 与电机同名对应)</h2>
+<div class="card">
+<table>
+<thead>
+<tr><th>功能</th><th>MCU引脚</th><th>端口</th><th>PinCM</th><th>类型</th><th>中断</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Encoder A — E1A</strong></td><td class="pin-highlight">PB0</td><td>GPIOB</td><td>12</td><td><span class="tag tag-int">GPIO_INT</span></td><td>双边沿 · 右后</td></tr>
+<tr><td><strong>Encoder A — E1B</strong></td><td class="pin-highlight">PB5</td><td>GPIOB</td><td>18</td><td><span class="tag tag-int">GPIO_INT</span></td><td>双边沿</td></tr>
+<tr><td><strong>Encoder B — E2A</strong></td><td class="pin-highlight">PB23</td><td>GPIOB</td><td>51</td><td><span class="tag tag-int">GPIO_INT</span></td><td>双边沿 · 右前</td></tr>
+<tr><td><strong>Encoder B — E2B</strong></td><td class="pin-highlight">PB18</td><td>GPIOB</td><td>44</td><td><span class="tag tag-int">GPIO_INT</span></td><td>双边沿</td></tr>
+<tr><td><strong>Encoder C — E3A</strong></td><td class="pin-highlight">PB27</td><td>GPIOB</td><td>58</td><td><span class="tag tag-int">GPIO_INT</span></td><td>双边沿 · 左前</td></tr>
+<tr><td><strong>Encoder C — E3B</strong></td><td class="pin-highlight">PB22</td><td>GPIOB</td><td>50</td><td><span class="tag tag-int">GPIO_INT</span></td><td>双边沿</td></tr>
+<tr><td><strong>Encoder D — E4A</strong></td><td class="pin-highlight">PB24</td><td>GPIOB</td><td>52</td><td><span class="tag tag-int">GPIO_INT</span></td><td>双边沿 · 左后</td></tr>
+<tr><td><strong>Encoder D — E4B</strong></td><td class="pin-highlight">PB26</td><td>GPIOB</td><td>57</td><td><span class="tag tag-int">GPIO_INT</span></td><td>双边沿</td></tr>
+</tbody>
+</table>
+</div>
+<p class="note">
+  四倍频 gray-code 查表 · <code>GROUP1_IRQHandler</code> / <code>GPIOB_INT</code> · 左累计 = EncC+EncD · 右累计 = EncB+EncA
+</p>
+
+<!-- ======================== 3. OLED ======================== -->
+<h2><span class="dot" style="background:var(--accent)"></span> OLED — SPI1 (SSD1306 128×64)</h2>
+<div class="card">
+<table>
+<thead>
+<tr><th>功能</th><th>MCU引脚</th><th>端口</th><th>PinCM</th><th>类型</th><th>备注</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>SCLK</strong></td><td class="pin-highlight">PB9</td><td>GPIOB</td><td>26</td><td><span class="tag tag-spi">SPI1_SCLK</span></td><td>20MHz</td></tr>
+<tr><td><strong>PICO (MOSI)</strong></td><td class="pin-highlight">PB8</td><td>GPIOB</td><td>25</td><td><span class="tag tag-spi">SPI1_PICO</span></td><td></td></tr>
+<tr><td><strong>POCI (MISO)</strong></td><td class="pin-highlight">PB21</td><td>GPIOB</td><td>49</td><td><span class="tag tag-spi">SPI1_POCI</span></td><td></td></tr>
+<tr><td><strong>CS</strong></td><td class="pin-highlight">PB14</td><td>GPIOB</td><td>31</td><td><span class="tag tag-gpio">DOUT</span></td><td>低有效</td></tr>
+<tr><td><strong>DC</strong></td><td class="pin-highlight">PB11</td><td>GPIOB</td><td>28</td><td><span class="tag tag-gpio">DOUT</span></td><td>数据/命令</td></tr>
+<tr><td><strong>RES</strong></td><td class="pin-highlight">PB10</td><td>GPIOB</td><td>27</td><td><span class="tag tag-gpio">DOUT</span></td><td>复位</td></tr>
+</tbody>
+</table>
+</div>
+
+<!-- ======================== 4. 调试串口 ======================== -->
+<h2><span class="dot" style="background:#2dd4bf"></span> 调试串口 — UART0</h2>
+<div class="card">
+<table>
+<thead>
+<tr><th>功能</th><th>MCU引脚</th><th>端口</th><th>PinCM</th><th>类型</th><th>备注</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>TX</strong></td><td class="pin-highlight">PA10</td><td>GPIOA</td><td>21</td><td><span class="tag tag-uart">UART0_TX</span></td><td>MCU → USB-TTL RX</td></tr>
+<tr><td><strong>RX</strong></td><td class="pin-highlight">PA11</td><td>GPIOA</td><td>22</td><td><span class="tag tag-uart">UART0_RX</span></td><td>USB-TTL TX → MCU</td></tr>
+</tbody>
+</table>
+</div>
+<p class="note">115200 8N1</p>
+
+<!-- ======================== 5. 灰度传感器 ======================== -->
+<h2><span class="dot" style="background:var(--muted)"></span> 灰度传感器 (8路巡线)</h2>
+<div class="card">
+<table>
+<thead>
+<tr><th>传感器</th><th>MCU引脚</th><th>端口</th><th>PinCM</th><th>类型</th><th>权重(位置)</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>S1</strong></td><td class="pin-highlight">PB19</td><td>GPIOB</td><td>45</td><td><span class="tag tag-gpio">DIN_PU</span></td><td>-3500 (最左)</td></tr>
+<tr><td><strong>S2</strong></td><td class="pin-highlight">PB17</td><td>GPIOB</td><td>43</td><td><span class="tag tag-gpio">DIN_PU</span></td><td>-2500</td></tr>
+<tr><td><strong>S3</strong></td><td class="pin-highlight">PA16</td><td>GPIOA</td><td>38</td><td><span class="tag tag-gpio">DIN_PU</span></td><td>-1500</td></tr>
+<tr><td><strong>S4</strong></td><td class="pin-highlight">PA14</td><td>GPIOA</td><td>36</td><td><span class="tag tag-gpio">DIN_PU</span></td><td>-500</td></tr>
+<tr><td><strong>S5</strong></td><td class="pin-highlight">PB20</td><td>GPIOB</td><td>48</td><td><span class="tag tag-gpio">DIN_PU</span></td><td>+500</td></tr>
+<tr><td><strong>S6</strong></td><td class="pin-highlight">PB25</td><td>GPIOB</td><td>56</td><td><span class="tag tag-gpio">DIN_PU</span></td><td>+1500</td></tr>
+<tr><td><strong>S7</strong></td><td class="pin-highlight">PA25</td><td>GPIOA</td><td>55</td><td><span class="tag tag-gpio">DIN_PU</span></td><td>+2500</td></tr>
+<tr><td><strong>S8</strong></td><td class="pin-highlight">PA27</td><td>GPIOA</td><td>60</td><td><span class="tag tag-gpio">DIN_PU</span></td><td>+3500 (最右)</td></tr>
+</tbody>
+</table>
+</div>
+<p class="note">
+  深色(黑线)=1 浅色=0 · 全0/全1 丢线 · <code>Read_Sensors()</code> bit0=S1…bit7=S8 · <code>line_track</code> 模块使用
+</p>
+
+<!-- ======================== 6. 软件模块 ======================== -->
+<h2><span class="dot" style="background:var(--green)"></span> 软件模块路径</h2>
+<div class="card">
+<table>
+<thead>
+<tr><th>模块</th><th>路径</th><th>说明</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>chassis</strong></td><td><code>src/Function/Src/chassis.c</code></td><td>四轮差速 / 极性 / 配平 / 转向</td></tr>
+<tr><td><strong>go_straight</strong></td><td><code>src/Function/Src/go_straight.c</code></td><td>编码器闭环走直线</td></tr>
+<tr><td><strong>line_track</strong></td><td><code>src/Function/Src/line_track.c</code></td><td>8 路灰度循迹 PID</td></tr>
+<tr><td><strong>motor</strong></td><td><code>src/Hardware/Src/motor.c</code></td><td>A/B TIMG · C/D TIMA0</td></tr>
+<tr><td><strong>encoder</strong></td><td><code>src/Hardware/Src/encoder.c</code></td><td>四路正交计数</td></tr>
+</tbody>
+</table>
+</div>
+
+<!-- ======================== 脚注 ======================== -->
+<p class="legacy">
+  最新更新：2026-07-24 · 对齐当前 car 工程（C/D=PA13/PA22 + TIMA0，轮位 C前左/B前右/D后左/A后右）<br>
+  依据 <code>motor.c</code> / <code>chassis.c</code> / <code>ti_msp_dl_config.h</code> · 封装脚号未列全者请查 MSPM0G3507 数据手册
+</p>
+
+</div>
+</body>
+</html>

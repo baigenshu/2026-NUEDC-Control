@@ -2,65 +2,60 @@
 #include "motor.h"
 #include "encoder.h"
 #include "chassis.h"
-#include "line_track.h"
+#include "motion.h"
 #include "OLED.h"
 #include "bsp_systick.h"
 
-/*
- * 四轮循迹
- *   左前C 右前B | 左后D 右后A
- *   8 路灰度: S1(左) … S8(右)
- *
- * 周期 15ms 调用 LineTrack_Step
- */
-#define CTRL_MS     15
-#define BASE_SPD    15
+/* 前进指定距离 → 原路返回 */
+#define BASE_PWM    18
+#define STEP_MS     10
+#define PAUSE_MS    800
+#define GO_M        0.50f   /* 单程距离 m */
 
-static void ui_show(const LineTrack_Status_t *st)
+static void ui_show(const char *tag)
 {
-    OLED_ShowString(1, 1, "Track");
-    OLED_ShowString(1, 7, st->lost ? "LOST" : (st->hard_corner ? "CORN" : " OK "));
+    const Motion_Status_t *m = Motion_GetStatus();
 
-    OLED_ShowString(2, 1, "L:");
-    OLED_ShowSignedNum(2, 3, st->left_cmd, 3);
-    OLED_ShowString(2, 8, "R:");
-    OLED_ShowSignedNum(2, 10, st->right_cmd, 3);
-
-    OLED_ShowString(3, 1, "E:");
-    OLED_ShowSignedNum(3, 3, st->error, 5);
-
-    OLED_ShowString(4, 1, "S:");
-    OLED_ShowHexNum(4, 3, st->sensors, 2);
+    OLED_ShowString(1, 1, tag);
+    OLED_ShowString(2, 1, "Tm:");
+    OLED_ShowSignedNum(2, 4, (int32_t)(m->target_m * 100.0f), 3);
+    OLED_ShowString(2, 9, "Fm:");
+    OLED_ShowSignedNum(2, 12, (int32_t)(m->feedback_m * 100.0f), 3);
+    OLED_ShowString(3, 1, "P:");
+    OLED_ShowNum(3, 3, (uint32_t)m->pulse_now, 4);
+    OLED_ShowString(3, 8, "/");
+    OLED_ShowNum(3, 9, (uint32_t)m->pulse_target, 4);
+    OLED_ShowString(4, 1, "done:");
+    OLED_ShowNum(4, 6, (uint32_t)m->done, 1);
 }
 
 int main(void)
 {
-    LineTrack_Status_t st;
-    uint32_t ui_div = 0;
-
     SYSCFG_DL_init();
     OLED_Init();
     OLED_Clear();
-    OLED_ShowString(1, 1, "Line Track");
-    delay_ms(500);
 
     Motor_Init();
     Encoder_Init();
     Chassis_Init();
-    LineTrack_Init();
-    LineTrack_SetBaseSpeed(BASE_SPD);
+    Motion_Init();
     Encoder_AllReset();
+
+    OLED_ShowString(1, 1, "GoReturn");
+    delay_ms(400);
     OLED_Clear();
 
     while (1) {
-        LineTrack_Step(&st);
+        /* 前进 */
+        ui_show("Go Fwd   ");
+        Motion_GoDistance_Wait(GO_M, BASE_PWM, STEP_MS);
+        ui_show("Hold     ");
+        delay_ms(PAUSE_MS);
 
-        /* OLED 稍慢刷新，少占控制时间 */
-        if (++ui_div >= 4U) {
-            ui_div = 0;
-            ui_show(&st);
-        }
-
-        delay_ms(CTRL_MS);
+        /* 原路返回（后退同距离） */
+        ui_show("Go Back  ");
+        Motion_GoDistance_Wait(-GO_M, BASE_PWM, STEP_MS);
+        ui_show("Hold     ");
+        delay_ms(PAUSE_MS);
     }
 }
