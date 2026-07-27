@@ -1,347 +1,98 @@
-#include "ti_msp_dl_config.h"
-#include "motor.h"
-
-/*
- *   A: PWM=PA12 TIMG0_CC0   IN=PB13/PB15
- *   B: PWM=PA21 TIMG6_CC0   IN=PB4/PB6
- *   C: PWM=PA13 TIMA0_CC3_CMPL  IN=PB1/PB2
- *   D: PWM=PA22 TIMA0_CC1       IN=PB3/PB7
- *   STBY=PB16
+/**
+ * @file motor.c
+ * @brief 四轮 TB6612 类 H 桥驱动
  */
+#include "motor.h"
+#include "chassis_cfg.h"
+#include "ti_msp_dl_config.h"
 
-#define M_TIM_CD            TIMA0
+typedef struct {
+    uint32_t in1_pin;
+    uint32_t in2_pin;
+    GPTIMER_Regs *pwm_inst;
+    DL_TIMER_CC_INDEX  pwm_idx;
+} motor_hw_t;
 
-#define M_PWMC_PORT         GPIOA
-#define M_PWMC_PIN          DL_GPIO_PIN_13
-#define M_PWMC_IOMUX        ((uint32_t)IOMUX_PINCM35)
-#define M_PWMC_FUNC         IOMUX_PINCM35_PF_TIMA0_CCP3_CMPL
-#define M_PWMC_CC           DL_TIMER_CC_3_INDEX
+static const motor_hw_t s_hw[MOTOR_ID_COUNT] = {
+    /* A 右后: PWMA C0 PA12 */
+    { GPIO_MOTOR_AIN1_PIN, GPIO_MOTOR_AIN2_PIN, PWMA_INST, GPIO_PWMA_C0_IDX },
+    /* B 右前: PWMB C0 PA21 */
+    { GPIO_MOTOR_BIN1_PIN, GPIO_MOTOR_BIN2_PIN, PWMB_INST, GPIO_PWMB_C0_IDX },
+    /* C 左前: PWMA C1 PA13 */
+    { GPIO_MOTOR_CIN1_PIN, GPIO_MOTOR_CIN2_PIN, PWMA_INST, GPIO_PWMA_C1_IDX },
+    /* D 左后: PWMB C1 PA22 */
+    { GPIO_MOTOR_DIN1_PIN, GPIO_MOTOR_DIN2_PIN, PWMB_INST, GPIO_PWMB_C1_IDX },
+};
 
-#define M_PWMD_PORT         GPIOA
-#define M_PWMD_PIN          DL_GPIO_PIN_22
-#define M_PWMD_IOMUX        ((uint32_t)IOMUX_PINCM47)
-#define M_PWMD_FUNC         IOMUX_PINCM47_PF_TIMA0_CCP1
-#define M_PWMD_CC           DL_TIMER_CC_1_INDEX
-
-/* C/D 与 A/B 同指令 */
-#define CD_GAIN_NUM         10U
-#define CD_GAIN_DEN         10U
-
-static uint16_t duty_of(uint16_t speed)
+static uint16_t clamp_duty(int16_t abs_duty)
 {
-    if (speed > 100U) {
-        speed = 100U;
-    }
-    if (speed == 0U) {
-        return 0U;
-    }
-    {
-        uint16_t d = (uint16_t)(((uint32_t)speed * MOTOR_PWM_PERIOD) / 100U);
-        if (d >= MOTOR_PWM_PERIOD) {
-            d = (uint16_t)(MOTOR_PWM_PERIOD - 1U);
-        }
-        if (d == 0U) {
-            d = 1U;
-        }
-        return d;
-    }
+    if (abs_duty < 0)
+        abs_duty = (int16_t)(-abs_duty);
+    if (abs_duty > 0 && abs_duty < PWM_DEADZONE)
+        abs_duty = (int16_t)PWM_DEADZONE;
+    if (abs_duty > PWM_MAX)
+        abs_duty = (int16_t)PWM_MAX;
+    return (uint16_t)abs_duty;
 }
 
-static uint16_t scale_cd(uint16_t speed)
+static void set_dir_pwm(const motor_hw_t *hw, int dir, uint16_t duty)
 {
-    uint32_t s;
-    if (speed == 0U) {
-        return 0U;
-    }
-    s = ((uint32_t)speed * CD_GAIN_NUM) / CD_GAIN_DEN;
-    if (s > 100U) {
-        s = 100U;
-    }
-    if (s == 0U) {
-        s = 1U;
-    }
-    return (uint16_t)s;
-}
-
-/* PA13=CMPL 反相脚：主通道 CC = period - duty */
-static uint16_t duty_cmpl(uint16_t speed)
-{
-    uint16_t d = duty_of(speed);
-    if (d == 0U) {
-        return (uint16_t)(MOTOR_PWM_PERIOD - 1U);
-    }
-    return (uint16_t)(MOTOR_PWM_PERIOD - d);
-}
-
-static int16_t clamp_spd(int16_t s)
-{
-    if (s > 100) {
-        return 100;
-    }
-    if (s < -100) {
-        return -100;
-    }
-    return s;
-}
-
-static void stby_on(void)
-{
-    DL_GPIO_setPins(GPIO_MOTOR_PORT, GPIO_MOTOR_STBY_PIN);
-}
-
-static void stby_off(void)
-{
-    DL_GPIO_clearPins(GPIO_MOTOR_PORT, GPIO_MOTOR_STBY_PIN);
-}
-
-static void tima0_cd_setup(void)
-{
-    static const DL_TimerA_ClockConfig clk = {
-        .clockSel = DL_TIMER_CLOCK_BUSCLK,
-        .divideRatio = DL_TIMER_CLOCK_DIVIDE_1,
-        .prescale = 1U,
-    };
-    static const DL_TimerA_PWMConfig pwm = {
-        .pwmMode = DL_TIMER_PWM_MODE_EDGE_ALIGN_UP,
-        .period = MOTOR_PWM_PERIOD,
-        .isTimerWithFourCC = true,
-        .startTimer = DL_TIMER_STOP,
-    };
-
-    DL_TimerA_reset(M_TIM_CD);
-    DL_TimerA_enablePower(M_TIM_CD);
-    delay_cycles(POWER_STARTUP_DELAY);
-
-    DL_TimerA_setClockConfig(M_TIM_CD, (DL_TimerA_ClockConfig *)&clk);
-    DL_TimerA_initPWMMode(M_TIM_CD, (DL_TimerA_PWMConfig *)&pwm);
-
-    DL_TimerA_setCaptureCompareOutCtl(M_TIM_CD, DL_TIMER_CC_OCTL_INIT_VAL_LOW,
-        DL_TIMER_CC_OCTL_INV_OUT_DISABLED, DL_TIMER_CC_OCTL_SRC_FUNCVAL,
-        M_PWMD_CC);
-    DL_TimerA_setCaptureCompareOutCtl(M_TIM_CD, DL_TIMER_CC_OCTL_INIT_VAL_LOW,
-        DL_TIMER_CC_OCTL_INV_OUT_DISABLED, DL_TIMER_CC_OCTL_SRC_FUNCVAL,
-        M_PWMC_CC);
-    DL_TimerA_setCaptCompUpdateMethod(M_TIM_CD,
-        DL_TIMER_CC_UPDATE_METHOD_IMMEDIATE, M_PWMD_CC);
-    DL_TimerA_setCaptCompUpdateMethod(M_TIM_CD,
-        DL_TIMER_CC_UPDATE_METHOD_IMMEDIATE, M_PWMC_CC);
-
-    DL_TimerA_setCaptureCompareValue(M_TIM_CD, 0, M_PWMD_CC);
-    DL_TimerA_setCaptureCompareValue(M_TIM_CD, MOTOR_PWM_PERIOD - 1U, M_PWMC_CC);
-
-    DL_TimerA_enableClock(M_TIM_CD);
-    DL_TimerA_setCCPDirection(M_TIM_CD,
-        DL_TIMER_CC0_OUTPUT | DL_TIMER_CC1_OUTPUT |
-            DL_TIMER_CC2_OUTPUT | DL_TIMER_CC3_OUTPUT);
-
-    DL_GPIO_initPeripheralOutputFunction(M_PWMC_IOMUX, M_PWMC_FUNC);
-    DL_GPIO_enableOutput(M_PWMC_PORT, M_PWMC_PIN);
-    DL_GPIO_initPeripheralOutputFunction(M_PWMD_IOMUX, M_PWMD_FUNC);
-    DL_GPIO_enableOutput(M_PWMD_PORT, M_PWMD_PIN);
-
-    DL_TimerA_startCounter(M_TIM_CD);
-}
-
-static void ch_a_off(void)
-{
-    DL_TimerG_setCaptureCompareValue(PWMA_INST, 0, DL_TIMER_CC_0_INDEX);
-    DL_GPIO_clearPins(GPIO_MOTOR_PORT, GPIO_MOTOR_AIN1_PIN | GPIO_MOTOR_AIN2_PIN);
-}
-
-static void ch_b_off(void)
-{
-    DL_TimerG_setCaptureCompareValue(PWMB_INST, 0, DL_TIMER_CC_0_INDEX);
-    DL_GPIO_clearPins(GPIO_MOTOR_PORT, GPIO_MOTOR_BIN1_PIN | GPIO_MOTOR_BIN2_PIN);
-}
-
-static void ch_c_off(void)
-{
-    DL_TimerA_setCaptureCompareValue(M_TIM_CD, MOTOR_PWM_PERIOD - 1U, M_PWMC_CC);
-    DL_GPIO_clearPins(GPIO_MOTOR_PORT, GPIO_MOTOR_CIN1_PIN | GPIO_MOTOR_CIN2_PIN);
-}
-
-static void ch_d_off(void)
-{
-    DL_TimerA_setCaptureCompareValue(M_TIM_CD, 0, M_PWMD_CC);
-    DL_GPIO_clearPins(GPIO_MOTOR_PORT, GPIO_MOTOR_DIN1_PIN | GPIO_MOTOR_DIN2_PIN);
-}
-
-static void ch_a_run(int dir, uint16_t speed)
-{
-    uint16_t d = duty_of(speed);
-    stby_on();
+    /* dir: +1 正转 IN1=0 IN2=1；-1 反转 IN1=1 IN2=0；0 滑行/刹 */
     if (dir > 0) {
-        DL_GPIO_clearPins(GPIO_MOTOR_PORT, GPIO_MOTOR_AIN1_PIN);
-        DL_GPIO_setPins(GPIO_MOTOR_PORT, GPIO_MOTOR_AIN2_PIN);
+        DL_GPIO_clearPins(GPIO_MOTOR_PORT, hw->in1_pin);
+        DL_GPIO_setPins(GPIO_MOTOR_PORT, hw->in2_pin);
+    } else if (dir < 0) {
+        DL_GPIO_setPins(GPIO_MOTOR_PORT, hw->in1_pin);
+        DL_GPIO_clearPins(GPIO_MOTOR_PORT, hw->in2_pin);
     } else {
-        DL_GPIO_setPins(GPIO_MOTOR_PORT, GPIO_MOTOR_AIN1_PIN);
-        DL_GPIO_clearPins(GPIO_MOTOR_PORT, GPIO_MOTOR_AIN2_PIN);
+        DL_GPIO_clearPins(GPIO_MOTOR_PORT, hw->in1_pin | hw->in2_pin);
     }
-    DL_GPIO_initPeripheralOutputFunction(GPIO_PWMA_C0_IOMUX, GPIO_PWMA_C0_IOMUX_FUNC);
-    DL_GPIO_enableOutput(GPIO_PWMA_C0_PORT, GPIO_PWMA_C0_PIN);
-    DL_TimerG_setCaptureCompareValue(PWMA_INST, d, DL_TIMER_CC_0_INDEX);
-    DL_TimerG_startCounter(PWMA_INST);
-}
-
-static void ch_b_run(int dir, uint16_t speed)
-{
-    uint16_t d = duty_of(speed);
-    stby_on();
-    if (dir > 0) {
-        DL_GPIO_clearPins(GPIO_MOTOR_PORT, GPIO_MOTOR_BIN1_PIN);
-        DL_GPIO_setPins(GPIO_MOTOR_PORT, GPIO_MOTOR_BIN2_PIN);
-    } else {
-        DL_GPIO_setPins(GPIO_MOTOR_PORT, GPIO_MOTOR_BIN1_PIN);
-        DL_GPIO_clearPins(GPIO_MOTOR_PORT, GPIO_MOTOR_BIN2_PIN);
-    }
-    DL_GPIO_initPeripheralOutputFunction(GPIO_PWMB_C0_IOMUX, GPIO_PWMB_C0_IOMUX_FUNC);
-    DL_GPIO_enableOutput(GPIO_PWMB_C0_PORT, GPIO_PWMB_C0_PIN);
-    DL_TimerG_setCaptureCompareValue(PWMB_INST, d, DL_TIMER_CC_0_INDEX);
-    DL_TimerG_startCounter(PWMB_INST);
-}
-
-static void ch_c_run(int dir, uint16_t speed)
-{
-    uint16_t sp = scale_cd(speed);
-    stby_on();
-    if (dir > 0) {
-        DL_GPIO_clearPins(GPIO_MOTOR_PORT, GPIO_MOTOR_CIN1_PIN);
-        DL_GPIO_setPins(GPIO_MOTOR_PORT, GPIO_MOTOR_CIN2_PIN);
-    } else {
-        DL_GPIO_setPins(GPIO_MOTOR_PORT, GPIO_MOTOR_CIN1_PIN);
-        DL_GPIO_clearPins(GPIO_MOTOR_PORT, GPIO_MOTOR_CIN2_PIN);
-    }
-    DL_GPIO_initPeripheralOutputFunction(M_PWMC_IOMUX, M_PWMC_FUNC);
-    DL_GPIO_enableOutput(M_PWMC_PORT, M_PWMC_PIN);
-    DL_TimerA_setCaptureCompareValue(M_TIM_CD, duty_cmpl(sp), M_PWMC_CC);
-    DL_TimerA_startCounter(M_TIM_CD);
-}
-
-static void ch_d_run(int dir, uint16_t speed)
-{
-    uint16_t sp = scale_cd(speed);
-    stby_on();
-    if (dir > 0) {
-        DL_GPIO_clearPins(GPIO_MOTOR_PORT, GPIO_MOTOR_DIN1_PIN);
-        DL_GPIO_setPins(GPIO_MOTOR_PORT, GPIO_MOTOR_DIN2_PIN);
-    } else {
-        DL_GPIO_setPins(GPIO_MOTOR_PORT, GPIO_MOTOR_DIN1_PIN);
-        DL_GPIO_clearPins(GPIO_MOTOR_PORT, GPIO_MOTOR_DIN2_PIN);
-    }
-    DL_GPIO_initPeripheralOutputFunction(M_PWMD_IOMUX, M_PWMD_FUNC);
-    DL_GPIO_enableOutput(M_PWMD_PORT, M_PWMD_PIN);
-    DL_TimerA_setCaptureCompareValue(M_TIM_CD, duty_of(sp), M_PWMD_CC);
-    DL_TimerA_startCounter(M_TIM_CD);
-}
-
-void MotorA_Forward(uint16_t s) { ch_a_run(+1, s); }
-void MotorA_Reverse(uint16_t s) { ch_a_run(-1, s); }
-void MotorA_Brake(void) { ch_a_off(); }
-void MotorA_Stop(void) { ch_a_off(); }
-void MotorA_Init(void) { ch_a_off(); }
-void MotorA_SetSpeed(int16_t speed)
-{
-    speed = clamp_spd(speed);
-    if (speed > 0) {
-        MotorA_Forward((uint16_t)speed);
-    } else if (speed < 0) {
-        MotorA_Reverse((uint16_t)(-speed));
-    } else {
-        MotorA_Stop();
-    }
-}
-
-void MotorB_Forward(uint16_t s) { ch_b_run(+1, s); }
-void MotorB_Reverse(uint16_t s) { ch_b_run(-1, s); }
-void MotorB_Brake(void) { ch_b_off(); }
-void MotorB_Stop(void) { ch_b_off(); }
-void MotorB_Init(void) { ch_b_off(); }
-void MotorB_SetSpeed(int16_t speed)
-{
-    speed = clamp_spd(speed);
-    if (speed > 0) {
-        MotorB_Forward((uint16_t)speed);
-    } else if (speed < 0) {
-        MotorB_Reverse((uint16_t)(-speed));
-    } else {
-        MotorB_Stop();
-    }
-}
-
-void MotorC_Forward(uint16_t s) { ch_c_run(+1, s); }
-void MotorC_Reverse(uint16_t s) { ch_c_run(-1, s); }
-void MotorC_Brake(void) { ch_c_off(); }
-void MotorC_Stop(void) { ch_c_off(); }
-void MotorC_Init(void) { ch_c_off(); }
-void MotorC_SetSpeed(int16_t speed)
-{
-    speed = clamp_spd(speed);
-    if (speed > 0) {
-        MotorC_Forward((uint16_t)speed);
-    } else if (speed < 0) {
-        MotorC_Reverse((uint16_t)(-speed));
-    } else {
-        MotorC_Stop();
-    }
-}
-
-void MotorD_Forward(uint16_t s) { ch_d_run(+1, s); }
-void MotorD_Reverse(uint16_t s) { ch_d_run(-1, s); }
-void MotorD_Brake(void) { ch_d_off(); }
-void MotorD_Stop(void) { ch_d_off(); }
-void MotorD_Init(void) { ch_d_off(); }
-void MotorD_SetSpeed(int16_t speed)
-{
-    speed = clamp_spd(speed);
-    if (speed > 0) {
-        MotorD_Forward((uint16_t)speed);
-    } else if (speed < 0) {
-        MotorD_Reverse((uint16_t)(-speed));
-    } else {
-        MotorD_Stop();
-    }
+    DL_TimerG_setCaptureCompareValue(hw->pwm_inst, duty, hw->pwm_idx);
 }
 
 void Motor_Init(void)
 {
-    /* A/B 仅用 SysConfig 的 TIMG0/TIMG6，勿改 CC0 配置 */
-    DL_TimerG_setCCPDirection(PWMA_INST, DL_TIMER_CC0_OUTPUT);
-    DL_TimerG_setCCPDirection(PWMB_INST, DL_TIMER_CC0_OUTPUT);
-    DL_TimerG_startCounter(PWMA_INST);
-    DL_TimerG_startCounter(PWMB_INST);
-
-    tima0_cd_setup();
-
-    ch_a_off();
-    ch_b_off();
-    ch_c_off();
-    ch_d_off();
-    stby_on();
+    Motor_StopAll(MOTOR_STOP_COAST);
+    Motor_SetEnable(false);
 }
 
-void Motor_AllStop(void)
+void Motor_SetEnable(bool on)
 {
-    ch_a_off();
-    ch_b_off();
-    ch_c_off();
-    ch_d_off();
+    if (on)
+        DL_GPIO_setPins(GPIO_MOTOR_PORT, GPIO_MOTOR_STBY_PIN);
+    else
+        DL_GPIO_clearPins(GPIO_MOTOR_PORT, GPIO_MOTOR_STBY_PIN);
 }
 
-void Motor_AllBrake(void)
+void Motor_Set(motor_id_t id, int16_t duty)
 {
-    Motor_AllStop();
+    const motor_hw_t *hw;
+    uint16_t d;
+
+    if ((unsigned)id >= MOTOR_ID_COUNT)
+        return;
+    hw = &s_hw[id];
+
+    if (duty == 0) {
+        set_dir_pwm(hw, 0, 0);
+        return;
+    }
+
+    d = clamp_duty(duty);
+    set_dir_pwm(hw, (duty > 0) ? +1 : -1, d);
 }
 
-void Motor_Standby(void)
+void Motor_StopAll(motor_stop_mode_t mode)
 {
-    Motor_AllStop();
-    stby_off();
-}
+    motor_id_t i;
 
-void Motor_SetPWM(int16_t m1, int16_t m2, int16_t m3, int16_t m4)
-{
-    MotorA_SetSpeed(m1);
-    MotorB_SetSpeed(m2);
-    MotorC_SetSpeed(m3);
-    MotorD_SetSpeed(m4);
+    for (i = MOTOR_ID_A; i < MOTOR_ID_COUNT; ++i) {
+        const motor_hw_t *hw = &s_hw[i];
+        DL_TimerG_setCaptureCompareValue(hw->pwm_inst, 0, hw->pwm_idx);
+        if (mode == MOTOR_STOP_BRAKE) {
+            DL_GPIO_setPins(GPIO_MOTOR_PORT, hw->in1_pin | hw->in2_pin);
+        } else {
+            DL_GPIO_clearPins(GPIO_MOTOR_PORT, hw->in1_pin | hw->in2_pin);
+        }
+    }
 }
