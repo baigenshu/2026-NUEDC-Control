@@ -1,63 +1,109 @@
 #include <Arduino.h>
+#include <string.h>
 
+#include "bridge_ring.h"
 #include "config.h"
 #include "espnow_radio.h"
 #include "link_proto.h"
 
-static uint32_t s_seq = 0;
-static uint32_t s_last_send_ms = 0;
+// Car-side: MCU UART <-> ESP-NOW
 
-static void on_sent(const uint8_t *mac, uint8_t status) {
+static uint32_t s_seq = 0;
+static uint8_t s_tx_buf[BRIDGE_MAX_CHUNK];
+static uint8_t s_tx_len = 0;
+static uint32_t s_last_uart_ms = 0;
+static bool s_bridge_ready = false;
+static volatile bool s_led_toggle = false;
+static LinkMsg s_tx_msg; // static: avoid large stack in loop
+
+static BridgeRing<2048> s_rx_ring;
+
+static void flush_uart_to_radio() {
+  if (s_tx_len == 0 || !s_bridge_ready || espnow_radio_send_busy()) {
+    return;
+  }
+
+  link_msg_init_data(&s_tx_msg, s_seq++, millis(), s_tx_buf, s_tx_len);
+
+  if (espnow_radio_try_send(espnow_radio_peer_mac(),
+                            reinterpret_cast<const uint8_t *>(&s_tx_msg),
+                            static_cast<uint8_t>(link_msg_wire_size(&s_tx_msg)))) {
+    s_tx_len = 0;
+    s_led_toggle = true;
+  }
+  // if busy/fail, keep s_tx_len and retry next loop
+}
+
+static void on_recv(const uint8_t *mac, const uint8_t *data, uint8_t len) {
   (void)mac;
-  Serial.print(F("send status="));
-  Serial.println(status == 0 ? F("ok") : F("fail"));
+
+  if (!s_bridge_ready) {
+    return;
+  }
+
+  const uint8_t n = link_msg_payload_len(data, len);
+  if (n == 0 || s_rx_ring.free() < n) {
+    return;
+  }
+
+  s_rx_ring.push(link_msg_payload_ptr(data), n);
+  s_led_toggle = true;
 }
 
 void setup() {
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, HIGH);
 
+  // Quiet UART: MCU shares this line; no banners after boot ROM.
   Serial.begin(SERIAL_BAUD);
-  delay(200);
-  Serial.println();
-  Serial.println(F("ESP-NOW sender"));
+  delay(100);
 
   if (!espnow_radio_begin(WIFI_CHANNEL)) {
-    Serial.println(F("espnow init failed"));
     while (true) {
-      delay(1000);
+      digitalWrite(LED_PIN, !digitalRead(LED_PIN));
+      delay(200);
     }
   }
 
-  espnow_radio_print_mac();
-  espnow_radio_on_sent(on_sent);
+  espnow_radio_on_recv(on_recv);
 
-  if (!espnow_radio_add_peer(PEER_MAC, WIFI_CHANNEL)) {
-    Serial.println(F("add peer failed"));
-  } else {
-    Serial.println(F("peer ready (broadcast/demo)"));
+  while (Serial.available()) {
+    (void)Serial.read();
   }
+
+  s_bridge_ready = true;
+  s_last_uart_ms = millis();
 }
 
 void loop() {
-  const uint32_t now = millis();
-  if (now - s_last_send_ms < SEND_INTERVAL_MS) {
-    return;
+  // ESP-NOW -> MCU UART
+  uint8_t chunk[64];
+  for (;;) {
+    const size_t n = s_rx_ring.pop(chunk, sizeof(chunk));
+    if (n == 0) {
+      break;
+    }
+    Serial.write(chunk, n);
   }
-  s_last_send_ms = now;
 
-  LinkMsg msg;
-  link_msg_init_ping(&msg, s_seq++, now);
+  // MCU UART -> ESP-NOW
+  bool got = false;
+  while (Serial.available() && s_tx_len < BRIDGE_MAX_CHUNK) {
+    s_tx_buf[s_tx_len++] = static_cast<uint8_t>(Serial.read());
+    got = true;
+  }
+  if (got) {
+    s_last_uart_ms = millis();
+  }
+  if (s_tx_len > 0 && (s_tx_len >= BRIDGE_MAX_CHUNK ||
+                        (millis() - s_last_uart_ms) >= BRIDGE_IDLE_MS)) {
+    flush_uart_to_radio();
+  }
 
-  const bool ok =
-      espnow_radio_send(PEER_MAC, reinterpret_cast<const uint8_t *>(&msg),
-                        static_cast<uint8_t>(link_msg_wire_size(&msg)));
+  if (s_led_toggle) {
+    s_led_toggle = false;
+    digitalWrite(LED_PIN, !digitalRead(LED_PIN));
+  }
 
-  Serial.print(F("ping seq="));
-  Serial.print(msg.seq);
-  Serial.println(ok ? F(" queued") : F(" send err"));
-
-  digitalWrite(LED_PIN, LOW);
-  delay(30);
-  digitalWrite(LED_PIN, HIGH);
+  yield();
 }

@@ -1,45 +1,72 @@
-/*
- * Copyright (c) 2021, Texas Instruments Incorporated
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- * *  Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *
- * *  Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- *
- * *  Neither the name of Texas Instruments Incorporated nor the names of
- *    its contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
- * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
- * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
- * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
 #include "ti_msp_dl_config.h"
+#include <stdarg.h>
+#include <stdio.h>
 
-#define LED_TOGGLE_DELAY_CYCLES (16000000U)
+/* ~1ms @ 80MHz (approximate) */
+#define POLL_SLICE_CYCLES (80000U)
+/* Heartbeat every ~5s so uplink stays quiet for echo tests */
+#define HEARTBEAT_SLICES (5000U)
+
+static void debug_putc(char c)
+{
+    DL_UART_Main_transmitDataBlocking(DEBUG_UART_INST, (uint8_t)c);
+}
+
+static void debug_puts(const char *s)
+{
+    while (*s)
+        debug_putc(*s++);
+}
+
+static void debug_printf(const char *fmt, ...)
+{
+    char buf[96];
+    va_list ap;
+    int n, i;
+
+    va_start(ap, fmt);
+    n = vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    if (n <= 0)
+        return;
+    if (n > (int)sizeof(buf))
+        n = (int)sizeof(buf);
+    for (i = 0; i < n; i++)
+        debug_putc(buf[i]);
+}
+
+static void echo_rx(void)
+{
+    while (!DL_UART_Main_isRXFIFOEmpty(DEBUG_UART_INST)) {
+        uint8_t b = DL_UART_Main_receiveData(DEBUG_UART_INST);
+        DL_UART_Main_transmitDataBlocking(DEBUG_UART_INST, b);
+    }
+}
 
 int main(void)
 {
+    uint32_t cnt = 0;
+    uint32_t i;
+
     SYSCFG_DL_init();
 
+    /* Drain boot garbage from ESP-01 ROM/firmware prints on shared UART */
+    for (i = 0; i < 200000U; i++) {
+        while (!DL_UART_Main_isRXFIFOEmpty(DEBUG_UART_INST)) {
+            (void)DL_UART_Main_receiveData(DEBUG_UART_INST);
+        }
+    }
+
+    debug_puts("\r\n=== duplex echo @115200 ===\r\n");
+    debug_puts("type text on PC; MCU echoes it back\r\n");
+
     while (1) {
-        delay_cycles(LED_TOGGLE_DELAY_CYCLES);
-        DL_GPIO_togglePins(GPIO_LED_PORT, GPIO_LED_LED_PIN);
+        for (i = 0; i < HEARTBEAT_SLICES; i++) {
+            echo_rx();
+            delay_cycles(POLL_SLICE_CYCLES);
+        }
+
+        cnt++;
+        debug_printf("alive cnt=%lu\r\n", (unsigned long)cnt);
     }
 }
