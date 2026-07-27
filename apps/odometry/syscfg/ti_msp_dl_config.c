@@ -40,6 +40,8 @@
 
 #include "ti_msp_dl_config.h"
 
+DL_UART_Main_backupConfig gSPARE3Backup;
+
 /*
  *  ======== SYSCFG_DL_init ========
  *  Perform any initialization needed before using any board APIs
@@ -53,11 +55,37 @@ SYSCONFIG_WEAK void SYSCFG_DL_init(void)
     SYSCFG_DL_ODOM_TIM_init();
     SYSCFG_DL_DEBUG_UART_init();
     SYSCFG_DL_IMU601_init();
+    SYSCFG_DL_SPARE2_init();
+    SYSCFG_DL_SPARE3_init();
     SYSCFG_DL_DMA_init();
     SYSCFG_DL_SYSTICK_init();
+    /* Ensure backup structures have no valid state */
+
+	gSPARE3Backup.backupRdy 	= false;
+
+}
+/*
+ * User should take care to save and restore register configuration in application.
+ * See Retention Configuration section for more details.
+ */
+SYSCONFIG_WEAK bool SYSCFG_DL_saveConfiguration(void)
+{
+    bool retStatus = true;
+
+	retStatus &= DL_UART_Main_saveConfiguration(SPARE3_INST, &gSPARE3Backup);
+
+    return retStatus;
 }
 
 
+SYSCONFIG_WEAK bool SYSCFG_DL_restoreConfiguration(void)
+{
+    bool retStatus = true;
+
+	retStatus &= DL_UART_Main_restoreConfiguration(SPARE3_INST, &gSPARE3Backup);
+
+    return retStatus;
+}
 
 SYSCONFIG_WEAK void SYSCFG_DL_initPower(void)
 {
@@ -66,6 +94,8 @@ SYSCONFIG_WEAK void SYSCFG_DL_initPower(void)
     DL_TimerG_reset(ODOM_TIM_INST);
     DL_UART_Main_reset(DEBUG_UART_INST);
     DL_UART_Main_reset(IMU601_INST);
+    DL_UART_Main_reset(SPARE2_INST);
+    DL_UART_Main_reset(SPARE3_INST);
 
 
 
@@ -74,6 +104,8 @@ SYSCONFIG_WEAK void SYSCFG_DL_initPower(void)
     DL_TimerG_enablePower(ODOM_TIM_INST);
     DL_UART_Main_enablePower(DEBUG_UART_INST);
     DL_UART_Main_enablePower(IMU601_INST);
+    DL_UART_Main_enablePower(SPARE2_INST);
+    DL_UART_Main_enablePower(SPARE3_INST);
 
 
     delay_cycles(POWER_STARTUP_DELAY);
@@ -90,6 +122,14 @@ SYSCONFIG_WEAK void SYSCFG_DL_GPIO_init(void)
         GPIO_IMU601_IOMUX_TX, GPIO_IMU601_IOMUX_TX_FUNC);
     DL_GPIO_initPeripheralInputFunction(
         GPIO_IMU601_IOMUX_RX, GPIO_IMU601_IOMUX_RX_FUNC);
+    DL_GPIO_initPeripheralOutputFunction(
+        GPIO_SPARE2_IOMUX_TX, GPIO_SPARE2_IOMUX_TX_FUNC);
+    DL_GPIO_initPeripheralInputFunction(
+        GPIO_SPARE2_IOMUX_RX, GPIO_SPARE2_IOMUX_RX_FUNC);
+    DL_GPIO_initPeripheralOutputFunction(
+        GPIO_SPARE3_IOMUX_TX, GPIO_SPARE3_IOMUX_TX_FUNC);
+    DL_GPIO_initPeripheralInputFunction(
+        GPIO_SPARE3_IOMUX_RX, GPIO_SPARE3_IOMUX_RX_FUNC);
 
     DL_GPIO_initDigitalInputFeatures(GPIO_ENCODERA_E1A_IOMUX,
 		 DL_GPIO_INVERSION_DISABLE, DL_GPIO_RESISTOR_PULL_UP,
@@ -109,8 +149,8 @@ SYSCONFIG_WEAK void SYSCFG_DL_GPIO_init(void)
 
     DL_GPIO_setLowerPinsPolarity(GPIOB, DL_GPIO_PIN_6_EDGE_RISE_FALL |
 		DL_GPIO_PIN_7_EDGE_RISE_FALL |
-		DL_GPIO_PIN_15_EDGE_RISE_FALL);
-    DL_GPIO_setUpperPinsPolarity(GPIOB, DL_GPIO_PIN_16_EDGE_RISE_FALL);
+		DL_GPIO_PIN_8_EDGE_RISE_FALL |
+		DL_GPIO_PIN_9_EDGE_RISE_FALL);
     DL_GPIO_clearInterruptStatus(GPIOB, GPIO_ENCODERA_E1A_PIN |
 		GPIO_ENCODERA_E1B_PIN |
 		GPIO_ENCODERB_E2A_PIN |
@@ -265,6 +305,68 @@ SYSCONFIG_WEAK void SYSCFG_DL_IMU601_init(void)
     DL_UART_Main_setTXFIFOThreshold(IMU601_INST, DL_UART_TX_FIFO_LEVEL_1_2_EMPTY);
 
     DL_UART_Main_enable(IMU601_INST);
+}
+static const DL_UART_Main_ClockConfig gSPARE2ClockConfig = {
+    .clockSel    = DL_UART_MAIN_CLOCK_BUSCLK,
+    .divideRatio = DL_UART_MAIN_CLOCK_DIVIDE_RATIO_1
+};
+
+static const DL_UART_Main_Config gSPARE2Config = {
+    .mode        = DL_UART_MAIN_MODE_NORMAL,
+    .direction   = DL_UART_MAIN_DIRECTION_TX_RX,
+    .flowControl = DL_UART_MAIN_FLOW_CONTROL_NONE,
+    .parity      = DL_UART_MAIN_PARITY_NONE,
+    .wordLength  = DL_UART_MAIN_WORD_LENGTH_8_BITS,
+    .stopBits    = DL_UART_MAIN_STOP_BITS_ONE
+};
+
+SYSCONFIG_WEAK void SYSCFG_DL_SPARE2_init(void)
+{
+    DL_UART_Main_setClockConfig(SPARE2_INST, (DL_UART_Main_ClockConfig *) &gSPARE2ClockConfig);
+
+    DL_UART_Main_init(SPARE2_INST, (DL_UART_Main_Config *) &gSPARE2Config);
+    /*
+     * Configure baud rate by setting oversampling and baud rate divisors.
+     *  Target baud rate: 115200
+     *  Actual baud rate: 115190.78
+     */
+    DL_UART_Main_setOversampling(SPARE2_INST, DL_UART_OVERSAMPLING_RATE_16X);
+    DL_UART_Main_setBaudRateDivisor(SPARE2_INST, SPARE2_IBRD_40_MHZ_115200_BAUD, SPARE2_FBRD_40_MHZ_115200_BAUD);
+
+
+
+    DL_UART_Main_enable(SPARE2_INST);
+}
+static const DL_UART_Main_ClockConfig gSPARE3ClockConfig = {
+    .clockSel    = DL_UART_MAIN_CLOCK_BUSCLK,
+    .divideRatio = DL_UART_MAIN_CLOCK_DIVIDE_RATIO_1
+};
+
+static const DL_UART_Main_Config gSPARE3Config = {
+    .mode        = DL_UART_MAIN_MODE_NORMAL,
+    .direction   = DL_UART_MAIN_DIRECTION_TX_RX,
+    .flowControl = DL_UART_MAIN_FLOW_CONTROL_NONE,
+    .parity      = DL_UART_MAIN_PARITY_NONE,
+    .wordLength  = DL_UART_MAIN_WORD_LENGTH_8_BITS,
+    .stopBits    = DL_UART_MAIN_STOP_BITS_ONE
+};
+
+SYSCONFIG_WEAK void SYSCFG_DL_SPARE3_init(void)
+{
+    DL_UART_Main_setClockConfig(SPARE3_INST, (DL_UART_Main_ClockConfig *) &gSPARE3ClockConfig);
+
+    DL_UART_Main_init(SPARE3_INST, (DL_UART_Main_Config *) &gSPARE3Config);
+    /*
+     * Configure baud rate by setting oversampling and baud rate divisors.
+     *  Target baud rate: 115200
+     *  Actual baud rate: 115190.78
+     */
+    DL_UART_Main_setOversampling(SPARE3_INST, DL_UART_OVERSAMPLING_RATE_16X);
+    DL_UART_Main_setBaudRateDivisor(SPARE3_INST, SPARE3_IBRD_80_MHZ_115200_BAUD, SPARE3_FBRD_80_MHZ_115200_BAUD);
+
+
+
+    DL_UART_Main_enable(SPARE3_INST);
 }
 
 static const DL_DMA_Config gDMA_CH0Config = {

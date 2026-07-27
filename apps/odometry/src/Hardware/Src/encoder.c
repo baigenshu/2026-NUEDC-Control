@@ -4,7 +4,7 @@
 /*
  * Dual GPIO x4 quadrature (gray-code table)
  *   EncA: PB6 / PB7
- *   EncB: PB15 / PB16  (LQFP-48)
+ *   EncB: PB8 / PB9  (LQFP-48)
  *
  * Full 4x: every valid A/B edge counts ±1 (no else-if drop).
  */

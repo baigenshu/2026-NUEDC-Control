@@ -118,6 +118,38 @@ extern "C" {
 #define IMU601_BAUD_RATE                                                (115200)
 #define IMU601_IBRD_40_MHZ_115200_BAUD                                      (21)
 #define IMU601_FBRD_40_MHZ_115200_BAUD                                      (45)
+/* Defines for SPARE2 */
+#define SPARE2_INST                                                        UART2
+#define SPARE2_INST_FREQUENCY                                           40000000
+#define SPARE2_INST_IRQHandler                                  UART2_IRQHandler
+#define SPARE2_INST_INT_IRQN                                      UART2_INT_IRQn
+#define GPIO_SPARE2_RX_PORT                                                GPIOA
+#define GPIO_SPARE2_TX_PORT                                                GPIOA
+#define GPIO_SPARE2_RX_PIN                                        DL_GPIO_PIN_22
+#define GPIO_SPARE2_TX_PIN                                        DL_GPIO_PIN_21
+#define GPIO_SPARE2_IOMUX_RX                                     (IOMUX_PINCM47)
+#define GPIO_SPARE2_IOMUX_TX                                     (IOMUX_PINCM46)
+#define GPIO_SPARE2_IOMUX_RX_FUNC                      IOMUX_PINCM47_PF_UART2_RX
+#define GPIO_SPARE2_IOMUX_TX_FUNC                      IOMUX_PINCM46_PF_UART2_TX
+#define SPARE2_BAUD_RATE                                                (115200)
+#define SPARE2_IBRD_40_MHZ_115200_BAUD                                      (21)
+#define SPARE2_FBRD_40_MHZ_115200_BAUD                                      (45)
+/* Defines for SPARE3 */
+#define SPARE3_INST                                                        UART3
+#define SPARE3_INST_FREQUENCY                                           80000000
+#define SPARE3_INST_IRQHandler                                  UART3_IRQHandler
+#define SPARE3_INST_INT_IRQN                                      UART3_INT_IRQn
+#define GPIO_SPARE3_RX_PORT                                                GPIOA
+#define GPIO_SPARE3_TX_PORT                                                GPIOA
+#define GPIO_SPARE3_RX_PIN                                        DL_GPIO_PIN_13
+#define GPIO_SPARE3_TX_PIN                                        DL_GPIO_PIN_14
+#define GPIO_SPARE3_IOMUX_RX                                     (IOMUX_PINCM35)
+#define GPIO_SPARE3_IOMUX_TX                                     (IOMUX_PINCM36)
+#define GPIO_SPARE3_IOMUX_RX_FUNC                      IOMUX_PINCM35_PF_UART3_RX
+#define GPIO_SPARE3_IOMUX_TX_FUNC                      IOMUX_PINCM36_PF_UART3_TX
+#define SPARE3_BAUD_RATE                                                (115200)
+#define SPARE3_IBRD_80_MHZ_115200_BAUD                                      (43)
+#define SPARE3_FBRD_80_MHZ_115200_BAUD                                      (26)
 
 
 
@@ -146,14 +178,14 @@ extern "C" {
 /* Port definition for Pin Group GPIO_ENCODERB */
 #define GPIO_ENCODERB_PORT                                               (GPIOB)
 
-/* Defines for E2A: GPIOB.15 with pinCMx 32 on package pin 25 */
-#define GPIO_ENCODERB_E2A_IIDX                              (DL_GPIO_IIDX_DIO15)
-#define GPIO_ENCODERB_E2A_PIN                                   (DL_GPIO_PIN_15)
-#define GPIO_ENCODERB_E2A_IOMUX                                  (IOMUX_PINCM32)
-/* Defines for E2B: GPIOB.16 with pinCMx 33 on package pin 26 */
-#define GPIO_ENCODERB_E2B_IIDX                              (DL_GPIO_IIDX_DIO16)
-#define GPIO_ENCODERB_E2B_PIN                                   (DL_GPIO_PIN_16)
-#define GPIO_ENCODERB_E2B_IOMUX                                  (IOMUX_PINCM33)
+/* Defines for E2A: GPIOB.8 with pinCMx 25 on package pin 22 */
+#define GPIO_ENCODERB_E2A_IIDX                               (DL_GPIO_IIDX_DIO8)
+#define GPIO_ENCODERB_E2A_PIN                                    (DL_GPIO_PIN_8)
+#define GPIO_ENCODERB_E2A_IOMUX                                  (IOMUX_PINCM25)
+/* Defines for E2B: GPIOB.9 with pinCMx 26 on package pin 23 */
+#define GPIO_ENCODERB_E2B_IIDX                               (DL_GPIO_IIDX_DIO9)
+#define GPIO_ENCODERB_E2B_PIN                                    (DL_GPIO_PIN_9)
+#define GPIO_ENCODERB_E2B_IOMUX                                  (IOMUX_PINCM26)
 
 
 
@@ -166,6 +198,8 @@ void SYSCFG_DL_SYSCTL_init(void);
 void SYSCFG_DL_ODOM_TIM_init(void);
 void SYSCFG_DL_DEBUG_UART_init(void);
 void SYSCFG_DL_IMU601_init(void);
+void SYSCFG_DL_SPARE2_init(void);
+void SYSCFG_DL_SPARE3_init(void);
 void SYSCFG_DL_DMA_init(void);
 
 void SYSCFG_DL_SYSTICK_init(void);

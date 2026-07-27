@@ -25,26 +25,31 @@ Board.peripheral.$assign          = "DEBUGSS";
 Board.peripheral.swclkPin.$assign = "PA20";
 Board.peripheral.swdioPin.$assign = "PA19";
 
-/* NRF24L01 control: CSN=PA8 CE=PA9 IRQ=PA15 (gimbal pin pool, not UART) */
+/* NRF24L01 control: VCC=PA7 CSN=PA8 CE=PA9 IRQ=PA15 (gimbal pin pool, not UART) */
 GPIO1.$name                              = "GPIO";
 GPIO1.port                               = "PORTA";
-GPIO1.associatedPins.create(3);
-GPIO1.associatedPins[0].$name            = "CS";
+GPIO1.associatedPins.create(4);
+GPIO1.associatedPins[0].$name            = "VCC";
 GPIO1.associatedPins[0].direction        = "OUTPUT";
 GPIO1.associatedPins[0].initialValue     = "SET";
-GPIO1.associatedPins[0].assignedPin      = "8";
-GPIO1.associatedPins[0].pin.$assign      = "PA8";
-GPIO1.associatedPins[1].$name            = "CE";
+GPIO1.associatedPins[0].assignedPin      = "7";
+GPIO1.associatedPins[0].pin.$assign      = "PA7";
+GPIO1.associatedPins[1].$name            = "CS";
 GPIO1.associatedPins[1].direction        = "OUTPUT";
-GPIO1.associatedPins[1].initialValue     = "CLEARED";
-GPIO1.associatedPins[1].assignedPin      = "9";
-GPIO1.associatedPins[1].pin.$assign      = "PA9";
-GPIO1.associatedPins[2].$name            = "IRQ";
-GPIO1.associatedPins[2].direction        = "INPUT";
-GPIO1.associatedPins[2].interruptEn      = true;
-GPIO1.associatedPins[2].polarity         = "FALL";
-GPIO1.associatedPins[2].assignedPin      = "15";
-GPIO1.associatedPins[2].pin.$assign      = "PA15";
+GPIO1.associatedPins[1].initialValue     = "SET";
+GPIO1.associatedPins[1].assignedPin      = "8";
+GPIO1.associatedPins[1].pin.$assign      = "PA8";
+GPIO1.associatedPins[2].$name            = "CE";
+GPIO1.associatedPins[2].direction        = "OUTPUT";
+GPIO1.associatedPins[2].initialValue     = "CLEARED";
+GPIO1.associatedPins[2].assignedPin      = "9";
+GPIO1.associatedPins[2].pin.$assign      = "PA9";
+GPIO1.associatedPins[3].$name            = "IRQ";
+GPIO1.associatedPins[3].direction        = "INPUT";
+GPIO1.associatedPins[3].interruptEn      = true;
+GPIO1.associatedPins[3].polarity         = "FALL";
+GPIO1.associatedPins[3].assignedPin      = "15";
+GPIO1.associatedPins[3].pin.$assign      = "PA15";
 
 /* SPI0: SCK=PA12 MOSI=PA14 MISO=PA13 (wiki SPI bus, also in gimbal pool) */
 SPI1.$name                              = "SPI";

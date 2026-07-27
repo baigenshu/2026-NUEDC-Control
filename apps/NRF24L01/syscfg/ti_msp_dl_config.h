@@ -120,6 +120,9 @@ extern "C" {
 /* Port definition for Pin Group GPIO */
 #define GPIO_PORT                                                        (GPIOA)
 
+/* Defines for VCC: GPIOA.7 with pinCMx 14 on package pin 13 */
+#define GPIO_VCC_PIN                                             (DL_GPIO_PIN_7)
+#define GPIO_VCC_IOMUX                                           (IOMUX_PINCM14)
 /* Defines for CS: GPIOA.8 with pinCMx 19 on package pin 16 */
 #define GPIO_CS_PIN                                              (DL_GPIO_PIN_8)
 #define GPIO_CS_IOMUX                                            (IOMUX_PINCM19)

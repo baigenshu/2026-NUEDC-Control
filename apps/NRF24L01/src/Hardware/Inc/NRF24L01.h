@@ -155,4 +155,7 @@ void NRF24L01_Gpio_Init_receive(void);
 void RF24L01_Init(void);
 void Buff_Clear(void);
 
+extern uint8_t g_RF24L01RxBuffer[33];
+extern volatile uint8_t g_rx_ready;
+
 #endif /* NRF24L01_H */

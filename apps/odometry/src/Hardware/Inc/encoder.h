@@ -6,7 +6,7 @@
 /*
  * Dual GPIO x4 quadrature (gray-code) — LQFP-48
  *   EncA: PB6 / PB7
- *   EncB: PB15 / PB16
+ *   EncB: PB8  / PB9
  */
 
 extern volatile int32_t EncoderA_Count;

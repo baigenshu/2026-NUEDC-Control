@@ -3,7 +3,7 @@
 
 /*
  * 完整里程计联调 — MSPM0G3507 LQFP-48
- *  EncA PB6/7  EncB PB15/16  IMU PA8/9  DEBUG PA10 TX @115200
+ *  EncA PB6/7  EncB PB8/9  IMU PA8/9  DEBUG PA10 TX @115200
  *
  * 上电: IMU 复位+校准(静止) → 等姿态帧 → Odom 零点 → 100Hz 融合
  * 串口: F / Y(0.01°) / Xmm Ymm / Td(0.1°) / EA EB

@@ -111,6 +111,8 @@ SYSCONFIG_WEAK void SYSCFG_DL_GPIO_init(void)
     DL_GPIO_initPeripheralInputFunction(
         GPIO_SPI_IOMUX_POCI, GPIO_SPI_IOMUX_POCI_FUNC);
 
+    DL_GPIO_initDigitalOutput(GPIO_VCC_IOMUX);
+
     DL_GPIO_initDigitalOutput(GPIO_CS_IOMUX);
 
     DL_GPIO_initDigitalOutput(GPIO_CE_IOMUX);
@@ -120,8 +122,10 @@ SYSCONFIG_WEAK void SYSCFG_DL_GPIO_init(void)
 		 DL_GPIO_HYSTERESIS_DISABLE, DL_GPIO_WAKEUP_DISABLE);
 
     DL_GPIO_clearPins(GPIO_PORT, GPIO_CE_PIN);
-    DL_GPIO_setPins(GPIO_PORT, GPIO_CS_PIN);
-    DL_GPIO_enableOutput(GPIO_PORT, GPIO_CS_PIN |
+    DL_GPIO_setPins(GPIO_PORT, GPIO_VCC_PIN |
+		GPIO_CS_PIN);
+    DL_GPIO_enableOutput(GPIO_PORT, GPIO_VCC_PIN |
+		GPIO_CS_PIN |
 		GPIO_CE_PIN);
     DL_GPIO_setLowerPinsPolarity(GPIO_PORT, DL_GPIO_PIN_15_EDGE_FALL);
     DL_GPIO_clearInterruptStatus(GPIO_PORT, GPIO_IRQ_PIN);

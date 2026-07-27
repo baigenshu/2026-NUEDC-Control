@@ -1,16 +1,18 @@
-/**
- * Odometry MCU — MSPM0G3507 LQFP-48(PT)
- * @cliArgs --device "MSPM0G350X" --part "Default" --package "LQFP-48(PT)" --product "mspm0_sdk@2.05.01.00"
- * @v2CliArgs --device "MSPM0G3507" --package "LQFP-48(PT)" --product "mspm0_sdk@2.05.01.00"
- * @versions {"tool":"1.24.1+4189"}
- *
- * Pin map (48-pin available GPIOs only):
- *   UART0 DEBUG  PA10 TX / PA11 RX  115200
- *   UART1 IMU601 PA8  TX / PA9  RX  115200 + DMA_CH0 RX
- *   ENC_A GPIO   PB6  / PB7     (both-edge)
- *   ENC_B GPIO   PB15 / PB16    (both-edge; PB0/PB5 在 48 脚封装上不存在)
- *   TIMER TIMG0  10 ms (100 Hz)
- */
+ /**
+  * Odometry MCU — MSPM0G3507 LQFP-48(PT)
+  * @cliArgs --device "MSPM0G350X" --part "Default" --package "LQFP-48(PT)" --product "mspm0_sdk@2.05.01.00"
+  * @v2CliArgs --device "MSPM0G3507" --package "LQFP-48(PT)" --product "mspm0_sdk@2.05.01.00"
+  * @versions {"tool":"1.24.1+4189"}
+  *
+  * Pin map (48-pin available GPIOs only):
+  *   UART0 DEBUG  PA10 TX / PA11 RX  115200
+  *   UART1 IMU601 PA8  TX / PA9  RX  115200 + DMA_CH0 RX
+  *   UART2 SPARE2 PA21 TX / PA22 RX  115200
+  *   UART3 SPARE3 PA14 TX / PA13 RX  115200
+  *   ENC_A GPIO   PB6  / PB7     (both-edge)
+  *   ENC_B GPIO   PB8  / PB9     (both-edge)
+  *   TIMER TIMG0  10 ms (100 Hz)
+  */
 
 /**
  * Import the modules used in this configuration.
@@ -25,6 +27,8 @@ const TIMER1  = TIMER.addInstance();
 const UART    = scripting.addModule("/ti/driverlib/UART", {}, false);
 const UART1   = UART.addInstance();
 const UART2   = UART.addInstance();
+const UART3   = UART.addInstance();
+const UART4   = UART.addInstance();
 
 /**
  * Write custom configuration values to the imported modules.
@@ -65,7 +69,7 @@ GPIO1.associatedPins[1].polarity         = "RISE_FALL";
 GPIO1.associatedPins[1].assignedPin      = "7";
 GPIO1.associatedPins[1].pin.$assign      = "PB7";
 
-/* ---- Encoder B: GPIO PB15/PB16 (48-pin OK) ---- */
+/* ---- Encoder B: GPIO PB8/PB9 ---- */
 GPIO2.$name                              = "GPIO_ENCODERB";
 GPIO2.port                               = "PORTB";
 GPIO2.associatedPins.create(2);
@@ -74,15 +78,15 @@ GPIO2.associatedPins[0].direction        = "INPUT";
 GPIO2.associatedPins[0].internalResistor = "PULL_UP";
 GPIO2.associatedPins[0].interruptEn      = true;
 GPIO2.associatedPins[0].polarity         = "RISE_FALL";
-GPIO2.associatedPins[0].assignedPin      = "15";
-GPIO2.associatedPins[0].pin.$assign      = "PB15";
+GPIO2.associatedPins[0].assignedPin      = "8";
+GPIO2.associatedPins[0].pin.$assign      = "PB8";
 GPIO2.associatedPins[1].$name            = "E2B";
 GPIO2.associatedPins[1].direction        = "INPUT";
 GPIO2.associatedPins[1].internalResistor = "PULL_UP";
 GPIO2.associatedPins[1].interruptEn      = true;
 GPIO2.associatedPins[1].polarity         = "RISE_FALL";
-GPIO2.associatedPins[1].assignedPin      = "16";
-GPIO2.associatedPins[1].pin.$assign      = "PB16";
+GPIO2.associatedPins[1].assignedPin      = "9";
+GPIO2.associatedPins[1].pin.$assign      = "PB9";
 
 SYSCTL.forceDefaultClkConfig = true;
 SYSCTL.clockTreeEn           = true;
@@ -138,6 +142,38 @@ UART2.DMA_CHANNEL_RX.addressMode        = "f2b";
 UART2.DMA_CHANNEL_RX.dstIncDec          = "INCREMENT";
 UART2.DMA_CHANNEL_RX.dstLength          = "BYTE";
 UART2.DMA_CHANNEL_RX.srcLength          = "BYTE";
+
+/* ---- UART2 spare: PA21 TX / PA22 RX ---- */
+UART3.$name                            = "SPARE2";
+UART3.targetBaudRate                   = 115200;
+UART3.peripheral.$assign               = "UART2";
+UART3.peripheral.rxPin.$assign         = "PA22";
+UART3.peripheral.txPin.$assign         = "PA21";
+UART3.txPinConfig.direction            = scripting.forceWrite("OUTPUT");
+UART3.txPinConfig.hideOutputInversion  = scripting.forceWrite(false);
+UART3.txPinConfig.onlyInternalResistor = scripting.forceWrite(false);
+UART3.txPinConfig.passedPeripheralType = scripting.forceWrite("Digital");
+UART3.txPinConfig.$name                = "ti_driverlib_gpio_GPIOPinGeneric_spare2_tx";
+UART3.rxPinConfig.hideOutputInversion  = scripting.forceWrite(false);
+UART3.rxPinConfig.onlyInternalResistor = scripting.forceWrite(false);
+UART3.rxPinConfig.passedPeripheralType = scripting.forceWrite("Digital");
+UART3.rxPinConfig.$name                = "ti_driverlib_gpio_GPIOPinGeneric_spare2_rx";
+
+/* ---- UART3 spare: PA14 TX / PA13 RX ---- */
+UART4.$name                            = "SPARE3";
+UART4.targetBaudRate                   = 115200;
+UART4.peripheral.$assign               = "UART3";
+UART4.peripheral.rxPin.$assign         = "PA13";
+UART4.peripheral.txPin.$assign         = "PA14";
+UART4.txPinConfig.direction            = scripting.forceWrite("OUTPUT");
+UART4.txPinConfig.hideOutputInversion  = scripting.forceWrite(false);
+UART4.txPinConfig.onlyInternalResistor = scripting.forceWrite(false);
+UART4.txPinConfig.passedPeripheralType = scripting.forceWrite("Digital");
+UART4.txPinConfig.$name                = "ti_driverlib_gpio_GPIOPinGeneric_spare3_tx";
+UART4.rxPinConfig.hideOutputInversion  = scripting.forceWrite(false);
+UART4.rxPinConfig.onlyInternalResistor = scripting.forceWrite(false);
+UART4.rxPinConfig.passedPeripheralType = scripting.forceWrite("Digital");
+UART4.rxPinConfig.$name                = "ti_driverlib_gpio_GPIOPinGeneric_spare3_rx";
 
 const ProjectConfig              = scripting.addModule("/ti/project_config/ProjectConfig", {}, false);
 ProjectConfig.migrationCondition = true;

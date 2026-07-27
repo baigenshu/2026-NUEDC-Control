@@ -339,14 +339,16 @@ void NRF24L01_Gpio_Init_transmit(void)
     RF24L01_SET_CS_HIGH();
 }
 
-uint8_t g_RF24L01RxBuffer[30];
+uint8_t g_RF24L01RxBuffer[33];
+volatile uint8_t g_rx_ready = 0;
 
 void Buff_Clear(void)
 {
     int i;
-    for (i = 0; i < 30; i++) {
+    for (i = 0; i < 33; i++) {
         g_RF24L01RxBuffer[i] = 0;
     }
+    g_rx_ready = 0;
 }
 
 void GROUP1_IRQHandler(void)
@@ -354,10 +356,16 @@ void GROUP1_IRQHandler(void)
     switch (DL_Interrupt_getPendingGroup(DL_INTERRUPT_GROUP_1)) {
     case GPIO_INT_IIDX:
         if (RF24L01_GET_IRQ_STATUS() == 0) {
-            NRF24L01_RxPacket(g_RF24L01RxBuffer);
-            RF24L01_SET_CS_LOW();
-            drv_spi_read_write_byte(FLUSH_RX);
-            RF24L01_SET_CS_HIGH();
+            uint8_t n = NRF24L01_RxPacket(g_RF24L01RxBuffer);
+            if (n > 0) {
+                if (n > 32) {
+                    n = 32;
+                }
+                g_RF24L01RxBuffer[n] = 0;
+                g_rx_ready = 1;
+            }
+            NRF24L01_Flush_Rx_Fifo();
+            RF24L01_SET_CE_HIGH();
         }
         DL_GPIO_clearInterruptStatus(GPIO_PORT, GPIO_IRQ_PIN);
         break;
@@ -373,9 +381,12 @@ uint8_t NRF24L01_RxPacket(uint8_t *rxbuf)
     l_Status = NRF24L01_Read_Reg(STATUS);
     NRF24L01_Write_Reg(STATUS, l_Status);
     if (l_Status & RX_OK) {
-        l_RxLength = NRF24L01_Read_Reg(R_RX_PL_WID);
+        l_RxLength = NRF24L01_Read_Top_Fifo_Width();
+        if (l_RxLength > 32) {
+            l_RxLength = 32;
+        }
         NRF24L01_Read_Buf(RD_RX_PLOAD, rxbuf, l_RxLength);
-        NRF24L01_Write_Reg(FLUSH_RX, 0xff);
+        NRF24L01_Flush_Rx_Fifo();
         return l_RxLength;
     }
     return 0;
