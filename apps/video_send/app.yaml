@@ -1,0 +1,17 @@
+id: video_send
+name: Video Send
+name[zh]: 视频推流
+version: 2.0.0
+author: baigenshu
+desc: Join MaixCam-ESP; TFT stream or Web record/play on Maix storage
+desc[zh]: 连 MaixCam-ESP；TFT 推流或网页录制/回放（存本机）
+exclude:
+  - .vscode
+  - dist
+  - __pycache__
+files:
+  - app.yaml
+  - avi_mjpeg.py
+  - main.py
+  - web_server.py
+icon: ''
