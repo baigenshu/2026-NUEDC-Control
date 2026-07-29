@@ -77,13 +77,13 @@
 <h2><span class="dot" style="background:var(--green)"></span> 车体轮位</h2>
 <div class="card">
   <div class="layout">
-    <div>左前 <strong>C</strong><br><code>MotorC</code> EncC</div>
-    <div>右前 <strong>B</strong><br><code>MotorB</code> EncB</div>
-    <div>左后 <strong>D</strong><br><code>MotorD</code> EncD</div>
-    <div>右后 <strong>A</strong><br><code>MotorA</code> EncA</div>
+    <div>左前 <strong>B</strong><br><code>MotorB</code> EncB</div>
+    <div>右前 <strong>C</strong><br><code>MotorC</code> EncC</div>
+    <div>左后 <strong>A</strong><br><code>MotorA</code> EncA</div>
+    <div>右后 <strong>D</strong><br><code>MotorD</code> EncD</div>
   </div>
   <p style="margin-top:12px;color:var(--muted);font-size:0.9rem;">
-    左 = C + D &nbsp;|&nbsp; 右 = B + A<br>
+    左 = A + B &nbsp;|&nbsp; 右 = C + D<br>
     极性 / 配平见 <code>chassis_cfg.h</code>
   </p>
 </div>
@@ -93,13 +93,13 @@
 <table>
 <thead><tr><th>功能</th><th>MCU</th><th>类型</th><th>备注</th></tr></thead>
 <tbody>
-<tr><td><strong>Motor A PWM</strong></td><td class="pin-highlight">PA12</td><td><span class="tag tag-pwm">TIMG0_CCP0</span></td><td>右后 · <code>GPIO_PWMA_C0</code></td></tr>
+<tr><td><strong>Motor A PWM</strong></td><td class="pin-highlight">PA12</td><td><span class="tag tag-pwm">TIMG0_CCP0</span></td><td>左后 · <code>GPIO_PWMA_C0</code></td></tr>
 <tr><td><strong>AIN1 / AIN2</strong></td><td class="pin-highlight">PB13 / PB15</td><td><span class="tag tag-gpio">DOUT</span></td><td>方向</td></tr>
-<tr><td><strong>Motor B PWM</strong></td><td class="pin-highlight">PA21</td><td><span class="tag tag-pwm">TIMG6_CCP0</span></td><td>右前 · <code>GPIO_PWMB_C0</code></td></tr>
+<tr><td><strong>Motor B PWM</strong></td><td class="pin-highlight">PA21</td><td><span class="tag tag-pwm">TIMG6_CCP0</span></td><td>左前 · <code>GPIO_PWMB_C0</code></td></tr>
 <tr><td><strong>BIN1 / BIN2</strong></td><td class="pin-highlight">PB4 / PB6</td><td><span class="tag tag-gpio">DOUT</span></td><td>方向</td></tr>
-<tr><td><strong>Motor C PWM</strong></td><td class="pin-highlight">PA13</td><td><span class="tag tag-pwm">TIMG0_CCP1</span></td><td>左前 · <code>GPIO_PWMA_C1</code></td></tr>
+<tr><td><strong>Motor C PWM</strong></td><td class="pin-highlight">PA13</td><td><span class="tag tag-pwm">TIMG0_CCP1</span></td><td>右前 · <code>GPIO_PWMA_C1</code></td></tr>
 <tr><td><strong>CIN1 / CIN2</strong></td><td class="pin-highlight">PB1 / PB2</td><td><span class="tag tag-gpio">DOUT</span></td><td>方向</td></tr>
-<tr><td><strong>Motor D PWM</strong></td><td class="pin-highlight">PA22</td><td><span class="tag tag-pwm">TIMG6_CCP1</span></td><td>左后 · <code>GPIO_PWMB_C1</code></td></tr>
+<tr><td><strong>Motor D PWM</strong></td><td class="pin-highlight">PA22</td><td><span class="tag tag-pwm">TIMG6_CCP1</span></td><td>右后 · <code>GPIO_PWMB_C1</code></td></tr>
 <tr><td><strong>DIN1 / DIN2</strong></td><td class="pin-highlight">PB3 / PB7</td><td><span class="tag tag-gpio">DOUT</span></td><td>方向</td></tr>
 <tr><td><strong>STBY</strong></td><td class="pin-highlight">PB16</td><td><span class="tag tag-gpio">DOUT</span></td><td>H=使能</td></tr>
 </tbody>
@@ -112,10 +112,10 @@
 <table>
 <thead><tr><th>功能</th><th>MCU</th><th>中断</th></tr></thead>
 <tbody>
-<tr><td><strong>EncA E1A/E1B</strong></td><td class="pin-highlight">PB0 / PB5</td><td>双边沿 · 右后</td></tr>
-<tr><td><strong>EncB E2A/E2B</strong></td><td class="pin-highlight">PB23 / PB18</td><td>双边沿 · 右前</td></tr>
-<tr><td><strong>EncC E3A/E3B</strong></td><td class="pin-highlight">PB27 / PB22</td><td>双边沿 · 左前</td></tr>
-<tr><td><strong>EncD E4A/E4B</strong></td><td class="pin-highlight">PB24 / PB26</td><td>双边沿 · 左后</td></tr>
+<tr><td><strong>EncA E1A/E1B</strong></td><td class="pin-highlight">PB0 / PB5</td><td>双边沿 · 左后</td></tr>
+<tr><td><strong>EncB E2A/E2B</strong></td><td class="pin-highlight">PB23 / PB18</td><td>双边沿 · 左前</td></tr>
+<tr><td><strong>EncC E3A/E3B</strong></td><td class="pin-highlight">PB27 / PB22</td><td>双边沿 · 右前</td></tr>
+<tr><td><strong>EncD E4A/E4B</strong></td><td class="pin-highlight">PB24 / PB26</td><td>双边沿 · 右后</td></tr>
 </tbody>
 </table>
 </div>

@@ -44,9 +44,16 @@ uint8_t Gray_ReadMask(void)
     uint8_t i;
 
     for (i = 0; i < 8u; ++i) {
-        /* 上拉：黑线接地 → 读到 0 → 软件视黑线为 1 */
-        if (DL_GPIO_readPins(s_pins[i].port, s_pins[i].pin) == 0u)
+        uint32_t raw = DL_GPIO_readPins(s_pins[i].port, s_pins[i].pin);
+#if GRAY_ACTIVE_LOW
+        /* 上拉常见：黑线拉低 → 有效 */
+        if (raw == 0u)
             mask |= (uint8_t)(1u << i);
+#else
+        /* 部分模块：黑线输出高 */
+        if (raw != 0u)
+            mask |= (uint8_t)(1u << i);
+#endif
     }
     return mask;
 }

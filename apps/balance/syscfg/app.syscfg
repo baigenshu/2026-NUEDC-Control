@@ -1,0 +1,58 @@
+/**
+ * balance — TMC_A 步进驱动最小配置
+ * EN=PA14 DIR=PA13 STEP=PA12 · STEP_TIM=TIMG7 10us
+ * @cliArgs --device "MSPM0G350X" --part "Default" --package "LQFP-64(PM)" --product "mspm0_sdk@2.05.01.00"
+ * @v2CliArgs --device "MSPM0G3507" --package "LQFP-64(PM)" --product "mspm0_sdk@2.05.01.00"
+ * @versions {"tool":"1.24.1+4189"}
+ */
+
+const GPIO    = scripting.addModule("/ti/driverlib/GPIO", {}, false);
+const GPIO1   = GPIO.addInstance();
+const SYSCTL  = scripting.addModule("/ti/driverlib/SYSCTL");
+const SYSTICK = scripting.addModule("/ti/driverlib/SYSTICK");
+const TIMER   = scripting.addModule("/ti/driverlib/TIMER", {}, false);
+const TIMER1  = TIMER.addInstance();
+
+const divider7       = system.clockTree["PLL_PDIV"];
+divider7.divideValue = 2;
+
+const divider9       = system.clockTree["UDIV"];
+divider9.divideValue = 2;
+
+const multiplier2         = system.clockTree["PLL_QDIV"];
+multiplier2.multiplyValue = 5;
+
+const mux8       = system.clockTree["HSCLKMUX"];
+mux8.inputSelect = "HSCLKMUX_SYSPLL2X";
+
+const Board = scripting.addModule("/ti/driverlib/Board", {}, false);
+
+GPIO1.$name                          = "GPIO_STEPPER";
+GPIO1.port                           = "PORTA";
+GPIO1.associatedPins.create(3);
+GPIO1.associatedPins[0].$name        = "EN";
+GPIO1.associatedPins[0].assignedPin  = "14";
+GPIO1.associatedPins[0].pin.$assign  = "PA14";
+GPIO1.associatedPins[0].initialValue = "SET"; /* ENN 高=禁用 */
+GPIO1.associatedPins[1].$name        = "DIR";
+GPIO1.associatedPins[1].assignedPin  = "13";
+GPIO1.associatedPins[1].pin.$assign  = "PA13";
+GPIO1.associatedPins[1].initialValue = "CLEARED";
+GPIO1.associatedPins[2].$name        = "STEP";
+GPIO1.associatedPins[2].assignedPin  = "12";
+GPIO1.associatedPins[2].pin.$assign  = "PA12";
+GPIO1.associatedPins[2].initialValue = "CLEARED";
+
+TIMER1.$name              = "STEP_TIM";
+TIMER1.timerMode          = "PERIODIC";
+TIMER1.timerPeriod        = "10 us";
+TIMER1.interrupts         = ["ZERO"];
+TIMER1.peripheral.$assign = "TIMG7";
+
+SYSCTL.clockTreeEn           = true;
+SYSCTL.forceDefaultClkConfig = true;
+
+SYSTICK.period          = 80000; /* 1 ms @ 80 MHz，业务可用 */
+SYSTICK.periodEnable    = true;
+SYSTICK.systickEnable   = true;
+SYSTICK.interruptEnable = true;

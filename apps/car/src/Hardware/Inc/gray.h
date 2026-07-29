@@ -2,8 +2,8 @@
  * @file gray.h
  * @brief 8 路灰度传感器
  *
- * bit0=G1 … bit7=G8；黑线=1、浅色=0。
- * 位置 = 各 bit 与 GRAY_WEIGHT_* 加权和（权重在 chassis_cfg.h）。
+ * bit0=G1 … bit7=G8（车头从左到右 1→8）；黑线=1、浅色=0。
+ * 位置 = 各 bit 与 GRAY_WEIGHT_* 加权和（左负右正，见 chassis_cfg.h）。
  */
 #ifndef GRAY_H
 #define GRAY_H
