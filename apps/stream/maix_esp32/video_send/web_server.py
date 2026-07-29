@@ -1,12 +1,14 @@
 """
 Flask web UI (Phone Web mode):
-  - Live MJPEG at /stream (Maix performance focused on live)
+  - Live MJPEG with steel-ball YOLO overlay
   - Start/Stop record on the PHONE via MediaRecorder (no Maix disk write)
 """
 
 import threading
 import time as pytime
 from flask import Flask, Response
+
+from detect_util import CONF_TH, IOU_TH, draw_detections, load_detector
 
 HTTP_PORT = 8000
 
@@ -16,6 +18,9 @@ _cam = None
 _cfg = None
 _stop = False
 _fps_show = 0.0
+_detector = None
+_use_zh = False
+_detect_count = 0
 
 INDEX_HTML = """<!DOCTYPE html>
 <html lang="zh-CN" data-mode="web">
@@ -23,7 +28,7 @@ INDEX_HTML = """<!DOCTYPE html>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
 <meta http-equiv="Cache-Control" content="no-store"/>
-<title>MaixCAM Live</title>
+<title>MaixCAM Ball Detect</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#0b0f14;color:#e8eef5;font-family:system-ui,-apple-system,sans-serif;
@@ -47,8 +52,8 @@ button:disabled{opacity:.45}
 </head>
 <body>
 <header>
-  <h1>MaixCAM Live</h1>
-  <p>上半直播 · 录制仅保存在手机 · Maix 不写盘</p>
+  <h1>钢珠检测直播</h1>
+  <p>上半：YOLO 框选画面 · 下半：录制到手机 · Maix 不写盘</p>
 </header>
 <div class="video-pane">
   <img id="live" src="/stream" alt="live" decoding="async" crossorigin="anonymous"/>
@@ -59,9 +64,9 @@ button:disabled{opacity:.45}
     <button id="btnStart" type="button">开始录制</button>
     <button id="btnStop" type="button" disabled>结束录制</button>
   </div>
-  <div class="status" id="status">空闲 — 录像将下载到手机</div>
+  <div class="status" id="status">空闲 — 录像含检测框，保存到手机</div>
   <p class="hint">
-    建议 Chrome。格式多为 WebM。录的是网页画面，不经过 Maix 存盘。<br/>
+    建议 Chrome。格式多为 WebM。画面含钢珠检测框。<br/>
     若无法录制，请换 Chrome 或检查浏览器权限。
   </p>
 </div>
@@ -138,7 +143,7 @@ button:disabled{opacity:.45}
     ctx.drawImage(img, 0, 0, cv.width, cv.height);
     var stream;
     try {
-      stream = cv.captureStream(20);
+      stream = cv.captureStream(15);
     } catch (e) {
       st.textContent = 'captureStream 失败: ' + e;
       return;
@@ -146,7 +151,7 @@ button:disabled{opacity:.45}
     chunks = [];
     var mime = pickMime();
     try {
-      rec = mime ? new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 1200000 })
+      rec = mime ? new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 1500000 })
                  : new MediaRecorder(stream);
     } catch (e) {
       st.textContent = 'MediaRecorder 失败: ' + e;
@@ -155,9 +160,7 @@ button:disabled{opacity:.45}
     rec.ondataavailable = function(ev){
       if (ev.data && ev.data.size > 0) chunks.push(ev.data);
     };
-    rec.onerror = function(ev){
-      st.textContent = '录制错误';
-    };
+    rec.onerror = function(){ st.textContent = '录制错误'; };
     rec.onstop = function(){
       if (drawTimer) cancelAnimationFrame(drawTimer);
       drawTimer = null;
@@ -174,7 +177,7 @@ button:disabled{opacity:.45}
       var a = document.createElement('a');
       var url = URL.createObjectURL(blob);
       a.href = url;
-      a.download = 'maix_' + Date.now() + '.' + ext;
+      a.download = 'ball_' + Date.now() + '.' + ext;
       document.body.appendChild(a);
       a.click();
       setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 2000);
@@ -188,7 +191,7 @@ button:disabled{opacity:.45}
     var tick = setInterval(function(){
       if (!rec) { clearInterval(tick); return; }
       var sec = Math.floor((Date.now() - t0) / 1000);
-      st.textContent = '录制中… ' + sec + 's（画面写入手机，Maix 不存盘）';
+      st.textContent = '录制中… ' + sec + 's（含检测框，仅存手机）';
     }, 500);
   };
 
@@ -222,21 +225,29 @@ def _jpeg_bytes(img, quality):
 
 
 def _camera_loop():
-    global _latest_jpeg, _fps_show
+    global _latest_jpeg, _fps_show, _detect_count
     from maix import app
 
     quality = int(_cfg.get("jpeg_quality", 50))
-    interval_ms = int(_cfg.get("frame_interval_ms", 45))
+    interval_ms = int(_cfg.get("frame_interval_ms", 50))
     fps_t = pytime.time()
     fps_n = 0
+    local_fps = 0.0
 
     while not _stop and not app.need_exit():
         t0 = pytime.time()
         try:
             img = _cam.read()
+            if _detector is not None:
+                objs = _detector.detect(img, conf_th=CONF_TH, iou_th=IOU_TH)
+                _detect_count = draw_detections(
+                    img, _detector, objs, _use_zh, fps=local_fps
+                )
+            else:
+                _detect_count = 0
             raw = _jpeg_bytes(img, quality)
         except Exception as e:
-            print("cam loop err:", e)
+            print("cam/detect loop err:", e)
             pytime.sleep(0.05)
             continue
 
@@ -246,10 +257,11 @@ def _camera_loop():
         fps_n += 1
         now = pytime.time()
         if now - fps_t >= 1.0:
-            _fps_show = fps_n / (now - fps_t)
+            local_fps = fps_n / (now - fps_t)
+            _fps_show = local_fps
             fps_n = 0
             fps_t = now
-            print("live fps: {:.1f}".format(_fps_show))
+            print("detect+live fps: {:.1f} balls={}".format(_fps_show, _detect_count))
 
         elapsed = (pytime.time() - t0) * 1000.0
         rest = interval_ms - elapsed
@@ -296,21 +308,23 @@ def create_app():
     return app_flask
 
 
-def run_web_server(cam, cfg, ip, port=HTTP_PORT):
-    global _cam, _cfg, _stop, _latest_jpeg
+def run_web_server(cam, cfg, ip, port=HTTP_PORT, detector=None, use_zh=False):
+    global _cam, _cfg, _stop, _latest_jpeg, _detector, _use_zh
     from maix import app as mapp
 
     _cam = cam
     _cfg = cfg
     _stop = False
     _latest_jpeg = None
+    _detector = detector
+    _use_zh = use_zh
 
-    th = threading.Thread(target=_camera_loop, name="cam-live", daemon=True)
+    th = threading.Thread(target=_camera_loop, name="cam-detect-live", daemon=True)
     th.start()
 
     flask_app = create_app()
-    print("Flask live-only http://{}:{}".format(ip, port))
-    print("Record on phone only (MediaRecorder); Maix does not save files")
+    print("Flask detect+live http://{}:{}".format(ip, port))
+    print("YOLO overlay on stream; phone MediaRecorder only")
 
     server_error = []
 
