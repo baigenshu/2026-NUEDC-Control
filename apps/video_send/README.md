@@ -1,54 +1,48 @@
-# video_send — MaixCAM-Pro 视频推流 / 网页录制
+# video_send — 全力直播 + 手机录制
 
-固定连 **MaixCam-ESP**，再选模式：
+## 当前策略
 
-| 模式 | 作用 |
+| 项目 | 说明 |
 |------|------|
-| **TFT Screen** | JpegStreamer；ESP 拉流上屏/SD |
-| **Phone Web** | Flask 网页：上半预览 + 录制/列表/回放（文件在 **Maix**） |
-
-## Phone Web（阶段 A）
-
-打开 `http://<MaixIP>:8000`：
-
-- **上半**：实时 MJPEG  
-- **开始录制 / 结束录制**：写入 `/root/recordings/VID_xxxx.avi`（AVI+MJPEG，非 MP4）  
-- **录像列表 + 播放**：在线 MJPEG 回放  
-
-ESP 读到页面 `data-mode="web"` 后 **不拉流**（只当热点），网页更流畅。
-
-### API
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/` | 主页 |
-| GET | `/stream` | 直播 |
-| POST | `/api/rec/start` | 开始录制 |
-| POST | `/api/rec/stop` | 结束录制 |
-| GET | `/api/rec/list` | 列表 JSON |
-| GET | `/api/rec/status` | 状态 |
-| GET | `/play?name=` | 回放页 |
-| GET | `/api/rec/play?name=` | 回放 MJPEG |
-| GET | `/rec/<name>` | 下载 |
+| WiFi | 固定连 **MaixCam-ESP** |
+| 直播 | Maix **只推流**，不写本机录像 |
+| 画质 | Web 默认 **320×240**，quality≈50 |
+| 录制 | **仅手机浏览器** MediaRecorder → 下载到手机 |
+| ESP | 只当热点（屏/拉流已弃用） |
 
 ## 使用
 
-1. 运行 `video_receive`（SoftAP）  
-2. 手机连 `MaixCam-ESP` / `grx060313`  
-3. 跑本应用 → 选 **Phone Web**  
-4. 浏览器打开屏上 IP  
-5. 点开始/结束录制，列表里点「播放」  
+1. 烧录并运行 **video_receive**（SoftAP only）  
+2. 手机连 `MaixCam-ESP` / `grx060313`（可无 Internet）  
+3. Maix 运行本应用 → 选 **Phone Web**  
+4. 浏览器打开屏上 `http://x.x.x.x:8000`  
+5. 上半看直播；下半 **开始/结束录制** → 自动下载到手机（多为 WebM）  
+6. 建议 **Chrome**；部分浏览器不支持 MediaRecorder  
+
+## 模式说明
+
+| 选项 | 状态 |
+|------|------|
+| Phone Web | **主用**：直播 + 手机录 |
+| TFT (off) | 保留入口，ESP 屏方案已停用 |
+
+## 若直播仍卡
+
+在 `main.py` 的 Web `MODES` 中降低：
+
+- `cam_w/h` → 240×180  
+- `jpeg_quality` → 40  
 
 ## 文件
 
 | 文件 | 作用 |
 |------|------|
-| `main.py` | WiFi、模式选择、TFT / Web 入口 |
-| `web_server.py` | Flask UI + API |
-| `avi_mjpeg.py` | AVI 写入与回放解析 |
+| `main.py` | WiFi、模式、入口 |
+| `web_server.py` | Flask 直播页 + 手机录制 UI |
+| `avi_mjpeg.py` | 旧本机 AVI（Web 已不用，可忽略） |
 
 ## 注意
 
-- 录像在 Maix `/root/recordings`，不是 ESP SD  
-- 格式 AVI+MJPEG；电脑可用 VLC 打开下载的文件  
-- 退出仍避免强制 `stop`/`del` 防 SIGSEGV  
+- 不再使用 `/root/recordings` 网页录制  
+- 手机录的是网页画面，画质上限=直播分辨率  
+- 切后台可能中断手机录制  

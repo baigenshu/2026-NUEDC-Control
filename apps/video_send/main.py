@@ -1,10 +1,11 @@
 """
-video_send — MaixCAM-Pro 摄像头 HTTP JPEG 推流
+video_send — MaixCAM-Pro 直播推流
 
 固定连接 ESP32 SoftAP：MaixCam-ESP
-  - TFT   → JpegStreamer；ESP 拉流上屏/SD
-  - Web   → Flask：上半预览 + 开始/结束录制 + 列表回放（存 Maix /root/recordings）
-             ESP 识别 data-mode=web 后不拉流
+  - 默认 / 主路径：Phone Web — 全力直播（较高画质），录像仅在手机浏览器
+  - TFT 模式入口保留但标注弃用（ESP 端屏方案已停用）
+
+ESP video_receive 当前仅作热点，不拉流、不上屏。
 """
 
 from maix import camera, display, image, app, time, http, network, err, touchscreen
@@ -13,24 +14,26 @@ AP_SSID = "MaixCam-ESP"
 AP_PASS = "grx060313"
 WIFI_TIMEOUT_S = 60
 
+# Web：ESP 不拉流、Maix 不写盘 → 提高画质/流畅
+# TFT：保留代码路径，屏方案已弃用
 MODES = [
     {
-        "label": "TFT Screen",
+        "label": "Phone Web",
+        "mode": "web",
+        "cam_w": 320,
+        "cam_h": 240,
+        "jpeg_quality": 50,
+        "frame_interval_ms": 45,
+        "preview_every": 12,
+    },
+    {
+        "label": "TFT (off)",
         "mode": "tft",
         "cam_w": 160,
         "cam_h": 120,
         "jpeg_quality": 35,
         "frame_interval_ms": 50,
         "preview_every": 8,
-    },
-    {
-        "label": "Phone Web",
-        "mode": "web",
-        "cam_w": 160,
-        "cam_h": 120,
-        "jpeg_quality": 32,
-        "frame_interval_ms": 45,
-        "preview_every": 10,
     },
 ]
 
@@ -43,13 +46,12 @@ TFT_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<meta http-equiv="Cache-Control" content="no-store"/>
-<title>TFT stream</title>
+<title>TFT (deprecated)</title>
 </head>
 <body style="background:#111;color:#ccc;font-family:sans-serif;text-align:center;margin:12px">
-<h3>TFT mode</h3>
-<p>ESP32 pulls stream for screen/SD. Phone can preview too:</p>
-<img id="live" src="/stream" style="max-width:100%;background:#000" decoding="async"/>
+<h3>TFT mode (deprecated)</h3>
+<p>ESP screen path is disabled. Use Phone Web.</p>
+<img id="live" src="/stream" style="max-width:100%;background:#000"/>
 </body>
 </html>
 """
@@ -155,21 +157,21 @@ def select_mode(disp, ts, ip):
     while not app.need_exit():
         canvas = image.Image(dw, dh)
         canvas.draw_rect(0, 0, dw, dh, color=image.Color.from_rgb(10, 14, 20), thickness=-1)
-        canvas.draw_string(BTN_GAP, 10, "Select target", color=image.COLOR_WHITE, scale=1.3)
+        canvas.draw_string(BTN_GAP, 10, "Select mode", color=image.COLOR_WHITE, scale=1.3)
         canvas.draw_string(
             BTN_GAP, 36, "WiFi OK  {}".format(ip), color=image.Color.from_rgb(140, 180, 220), scale=0.85
         )
         canvas.draw_string(
-            BTN_GAP, 54, "phone join same AP", color=image.Color.from_rgb(100, 140, 160), scale=0.75
+            BTN_GAP, 54, "rec on phone only", color=image.Color.from_rgb(100, 140, 160), scale=0.75
         )
 
         for i, m in enumerate(MODES):
             if m["mode"] == "web":
                 color = (30, 90, 140)
-                extra = "  (rec+play)"
+                extra = "  (live+phone rec)"
             else:
-                color = (30, 100, 70)
-                extra = "  (ESP32)"
+                color = (60, 60, 60)
+                extra = "  (deprecated)"
             draw_btn(canvas, mode_btns[i], m["label"] + extra, fill_rgb=color)
 
         draw_btn(canvas, exit_btn, "Exit", fill_rgb=(100, 40, 40))
@@ -194,13 +196,9 @@ def select_mode(disp, ts, ip):
 
 
 def run_tft_stream(disp, ts, cfg, ip):
-    cam_w = cfg["cam_w"]
-    cam_h = cfg["cam_h"]
-    quality = cfg["jpeg_quality"]
-    interval = cfg["frame_interval_ms"]
-    preview_every = cfg["preview_every"]
-
-    cam = camera.Camera(cam_w, cam_h)
+    """Deprecated path — ESP screen disabled; kept for optional re-enable."""
+    print("WARNING: TFT mode selected but ESP screen stack is disabled")
+    cam = camera.Camera(cfg["cam_w"], cfg["cam_h"])
     stream = http.JpegStreamer()
     try:
         stream.set_html(TFT_HTML)
@@ -210,24 +208,22 @@ def run_tft_stream(disp, ts, cfg, ip):
 
     pub_host = ip if ip else "127.0.0.1"
     port = stream.port()
-    page_url = "http://{}:{}".format(pub_host, port)
-    print("mode: tft")
-    print("page:", page_url)
-    print("ESP32 STREAM_HOST should be:", pub_host)
+    print("tft (deprecated) http://{}:{}".format(pub_host, port))
 
     fps_t = time.ticks_ms()
     fps_n = 0
-    fps_show = 0.0
     frame_i = 0
     pressed_last = False
     dw, dh = disp.width(), disp.height()
+    quality = cfg["jpeg_quality"]
+    interval = cfg["frame_interval_ms"]
+    preview_every = cfg["preview_every"]
 
     while not app.need_exit():
         t0 = time.ticks_ms()
         try:
             img = cam.read()
-            jpg = encode_jpeg(img, quality)
-            stream.write(jpg)
+            stream.write(encode_jpeg(img, quality))
         except Exception as e:
             if app.need_exit():
                 break
@@ -236,18 +232,14 @@ def run_tft_stream(disp, ts, cfg, ip):
             continue
 
         frame_i += 1
-        iw, ih = img.width(), img.height()
-        exit_btn = exit_btn_on_image(iw, ih)
-
+        exit_btn = exit_btn_on_image(img.width(), img.height())
         try:
             tx, ty, pressed = ts.read()
         except Exception:
             tx, ty, pressed = 0, 0, False
-
         if pressed and not pressed_last:
-            mx, my = map_touch(tx, ty, dw, dh, iw, ih)
+            mx, my = map_touch(tx, ty, dw, dh, img.width(), img.height())
             if is_in_btn(mx, my, exit_btn):
-                print("touch Exit")
                 app.set_exit_flag(True)
                 break
         pressed_last = pressed
@@ -255,41 +247,34 @@ def run_tft_stream(disp, ts, cfg, ip):
         fps_n += 1
         now = time.ticks_ms()
         if now - fps_t >= 1000:
-            fps_show = fps_n * 1000.0 / (now - fps_t)
+            print("push fps: {:.1f}".format(fps_n * 1000.0 / (now - fps_t)))
             fps_n = 0
             fps_t = now
-            print("push fps: {:.1f}, ip: {}".format(fps_show, ip))
 
         if frame_i % preview_every == 0:
             try:
                 show = img
-                show.draw_string(2, 2, "tft {}".format(pub_host), color=image.COLOR_GREEN, scale=0.7)
-                show.draw_string(
-                    2, 16, "fps:{:.0f} :{}".format(fps_show, port), color=image.COLOR_WHITE, scale=0.7
-                )
+                show.draw_string(2, 2, "TFT off use Web", color=image.COLOR_GREEN, scale=0.7)
                 draw_exit_btn(show, exit_btn)
                 disp.show(show)
             except Exception:
                 pass
 
-        elapsed = time.ticks_ms() - t0
-        rest = interval - elapsed
+        rest = interval - (time.ticks_ms() - t0)
         if rest > 0:
             time.sleep_ms(rest)
 
 
 def run_web_mode(disp, ts, cfg, ip):
-    """Flask: live + record + list + play. Local UI shows URL / Exit."""
-    from web_server import run_web_server, HTTP_PORT, REC_DIR
+    from web_server import run_web_server, HTTP_PORT
     import threading
 
     cam = camera.Camera(cfg["cam_w"], cfg["cam_h"])
     page_url = "http://{}:{}".format(ip, HTTP_PORT)
-    print("mode: web (Flask)")
+    print("mode: web live-only")
     print("page:", page_url)
-    print("recordings:", REC_DIR)
+    print("quality", cfg["cam_w"], "x", cfg["cam_h"], "q=", cfg["jpeg_quality"])
 
-    # local status UI thread
     ui_stop = {"v": False}
 
     def ui_loop():
@@ -299,19 +284,22 @@ def run_web_mode(disp, ts, cfg, ip):
             try:
                 canvas = image.Image(dw, dh)
                 canvas.draw_rect(0, 0, dw, dh, color=image.Color.from_rgb(10, 14, 20), thickness=-1)
-                canvas.draw_string(8, 12, "WEB mode", color=image.COLOR_GREEN, scale=1.2)
+                canvas.draw_string(8, 12, "LIVE Web", color=image.COLOR_GREEN, scale=1.2)
                 canvas.draw_string(8, 40, ip, color=image.COLOR_WHITE, scale=1.0)
-                canvas.draw_string(8, 64, ":{} record+play".format(HTTP_PORT), color=image.Color.from_rgb(120, 200, 255), scale=0.9)
-                canvas.draw_string(8, 90, "phone open URL above", color=image.Color.from_rgb(160, 170, 180), scale=0.8)
+                canvas.draw_string(
+                    8, 64, ":{}  {}x{}".format(HTTP_PORT, cfg["cam_w"], cfg["cam_h"]),
+                    color=image.Color.from_rgb(120, 200, 255), scale=0.9,
+                )
+                canvas.draw_string(
+                    8, 90, "rec on phone only", color=image.Color.from_rgb(160, 170, 180), scale=0.8
+                )
                 exit_btn = [dw - 100, dh - 50, 90, 40]
                 draw_exit_btn(canvas, exit_btn)
                 disp.show(canvas)
-
                 tx, ty, pressed = ts.read()
                 if pressed and not pressed_last:
                     mx, my = map_touch(tx, ty, dw, dh, dw, dh)
                     if is_in_btn(mx, my, exit_btn):
-                        print("touch Exit (web)")
                         app.set_exit_flag(True)
                         break
                 pressed_last = pressed
@@ -321,7 +309,6 @@ def run_web_mode(disp, ts, cfg, ip):
 
     th = threading.Thread(target=ui_loop, name="web-ui", daemon=True)
     th.start()
-
     try:
         run_web_server(cam, cfg, ip, port=HTTP_PORT)
     finally:
@@ -351,23 +338,20 @@ def main():
         time.sleep_ms(2000)
         show_exiting(disp)
         light_cleanup(reason="wifi failed")
-        print("video_send exited")
         return
 
     if app.need_exit():
         show_exiting(disp)
-        light_cleanup(reason="user key during wifi")
+        light_cleanup(reason="user key")
         return
 
     cfg = select_mode(disp, ts, ip)
     if cfg is None or app.need_exit():
-        print("user exit at mode select")
         show_exiting(disp)
         light_cleanup(reason="select exit")
-        print("video_send exited")
         return
 
-    print("selected mode:", cfg["mode"], cfg["label"])
+    print("selected:", cfg["mode"], cfg["label"])
     try:
         if cfg["mode"] == "web":
             run_web_mode(disp, ts, cfg, ip)

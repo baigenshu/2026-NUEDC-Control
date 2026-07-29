@@ -1,33 +1,21 @@
 """
-Flask web UI for Phone Web mode:
-  - upper half live MJPEG
-  - start/stop record to Maix local storage
-  - list + playback of AVI/MJPEG files
+Flask web UI (Phone Web mode):
+  - Live MJPEG at /stream (Maix performance focused on live)
+  - Start/Stop record on the PHONE via MediaRecorder (no Maix disk write)
 """
 
-import os
 import threading
 import time as pytime
-from flask import Flask, Response, jsonify, request, send_file
+from flask import Flask, Response
 
-from avi_mjpeg import AviMjpegWriter, iter_avi_jpeg_frames, list_recordings, next_rec_path
-
-REC_DIR = "/root/recordings"
 HTTP_PORT = 8000
 
-# shared state
 _lock = threading.Lock()
 _latest_jpeg = None
 _cam = None
 _cfg = None
 _stop = False
-_recording = False
-_avi = None
-_rec_name = ""
-_rec_error = ""
-_frame_i = 0
 _fps_show = 0.0
-
 
 INDEX_HTML = """<!DOCTYPE html>
 <html lang="zh-CN" data-mode="web">
@@ -43,146 +31,172 @@ body{background:#0b0f14;color:#e8eef5;font-family:system-ui,-apple-system,sans-s
 header{flex:0 0 auto;padding:10px 12px;background:#121821;border-bottom:1px solid #1e2a38}
 header h1{font-size:1rem;font-weight:600}
 header p{font-size:.72rem;color:#8fa3b8;margin-top:3px}
-.video-pane{flex:0 0 48vh;min-height:180px;padding:8px 10px;display:flex;align-items:center;justify-content:center;
-            background:#000;border-bottom:1px solid #1e2a38}
-.video-pane img{max-width:100%;max-height:100%;object-fit:contain;border-radius:6px}
-.panel{flex:1 1 auto;overflow:auto;padding:10px 12px 16px;max-width:720px;width:100%;margin:0 auto}
+.video-pane{flex:0 0 50vh;min-height:200px;padding:8px 10px;display:flex;align-items:center;justify-content:center;
+            background:#000;border-bottom:1px solid #1e2a38;position:relative}
+#live{max-width:100%;max-height:100%;object-fit:contain;border-radius:6px}
+#cv{position:absolute;left:-9999px;top:0;width:1px;height:1px}
+.panel{flex:1 1 auto;overflow:auto;padding:12px;max-width:720px;width:100%;margin:0 auto}
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-button{flex:1 1 120px;padding:12px 10px;border:0;border-radius:8px;font-size:.95rem;font-weight:600;color:#fff}
+button{flex:1 1 130px;padding:14px 10px;border:0;border-radius:8px;font-size:.95rem;font-weight:600;color:#fff}
 #btnStart{background:#1a7a45}
 #btnStop{background:#a33a3a}
-#btnRefresh{background:#2a3a4a;flex:0 0 auto;padding:12px 14px}
 button:disabled{opacity:.45}
-.status{font-size:.8rem;color:#9ab;margin-bottom:10px;min-height:1.2em}
-h2{font-size:.85rem;color:#9ab;margin:8px 0 6px;font-weight:600}
-.list{list-style:none}
-.list li{display:flex;align-items:center;gap:8px;padding:10px;margin-bottom:6px;
-         background:#121821;border:1px solid #243044;border-radius:8px}
-.list .meta{flex:1;min-width:0}
-.list .name{font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.list .sub{font-size:.7rem;color:#6b7c8f;margin-top:2px}
-.list a,.list button.play{flex:0 0 auto;padding:8px 12px;border-radius:6px;background:#2a5a8a;
-         color:#fff;text-decoration:none;border:0;font-size:.8rem}
-.empty{color:#667;font-size:.8rem;padding:8px 0}
+.status{font-size:.82rem;color:#9ab;margin-bottom:8px;min-height:1.3em}
+.hint{font-size:.72rem;color:#667;line-height:1.45}
 </style>
 </head>
 <body>
 <header>
-  <h1>MaixCAM Live + Record</h1>
-  <p>上半实时预览 · 下半录制/回放 · 无登录 · data-mode=web</p>
+  <h1>MaixCAM Live</h1>
+  <p>上半直播 · 录制仅保存在手机 · Maix 不写盘</p>
 </header>
 <div class="video-pane">
-  <img id="live" src="/stream" alt="live" decoding="async"/>
+  <img id="live" src="/stream" alt="live" decoding="async" crossorigin="anonymous"/>
+  <canvas id="cv"></canvas>
 </div>
 <div class="panel">
   <div class="row">
     <button id="btnStart" type="button">开始录制</button>
     <button id="btnStop" type="button" disabled>结束录制</button>
-    <button id="btnRefresh" type="button">刷新列表</button>
   </div>
-  <div class="status" id="status">就绪</div>
-  <h2>录像列表（本机）</h2>
-  <ul class="list" id="list"></ul>
-  <p class="empty" id="empty">暂无录像</p>
+  <div class="status" id="status">空闲 — 录像将下载到手机</div>
+  <p class="hint">
+    建议 Chrome。格式多为 WebM。录的是网页画面，不经过 Maix 存盘。<br/>
+    若无法录制，请换 Chrome 或检查浏览器权限。
+  </p>
 </div>
 <script>
 (function(){
-  var img=document.getElementById('live');
-  var st=document.getElementById('status');
-  var list=document.getElementById('list');
-  var empty=document.getElementById('empty');
-  var btnStart=document.getElementById('btnStart');
-  var btnStop=document.getElementById('btnStop');
-  var n=0;
-  function bump(){ n++; img.src='/stream?t='+Date.now()+'-'+n; }
-  img.onerror=function(){ setTimeout(bump,800); };
+  var img = document.getElementById('live');
+  var cv = document.getElementById('cv');
+  var ctx = cv.getContext('2d');
+  var st = document.getElementById('status');
+  var btnStart = document.getElementById('btnStart');
+  var btnStop = document.getElementById('btnStop');
+  var n = 0;
+  var rec = null;
+  var chunks = [];
+  var drawTimer = null;
+  var t0 = 0;
 
-  function fmtSize(b){
-    if(b<1024) return b+' B';
-    if(b<1048576) return (b/1024).toFixed(1)+' KB';
-    return (b/1048576).toFixed(2)+' MB';
+  function bump(){
+    n++;
+    img.src = '/stream?t=' + Date.now() + '-' + n;
   }
-  function setRecUi(rec, name){
-    btnStart.disabled=!!rec;
-    btnStop.disabled=!rec;
-    st.textContent=rec?('录制中: '+(name||'')):'空闲';
-  }
-  function loadStatus(){
-    fetch('/api/rec/status').then(function(r){return r.json();}).then(function(j){
-      setRecUi(j.recording, j.name);
-      if(j.error) st.textContent='错误: '+j.error;
-    }).catch(function(){});
-  }
-  function loadList(){
-    fetch('/api/rec/list').then(function(r){return r.json();}).then(function(j){
-      list.innerHTML='';
-      var arr=j.items||[];
-      empty.style.display=arr.length?'none':'block';
-      arr.forEach(function(it){
-        var li=document.createElement('li');
-        var meta=document.createElement('div'); meta.className='meta';
-        var nm=document.createElement('div'); nm.className='name'; nm.textContent=it.name;
-        var sub=document.createElement('div'); sub.className='sub';
-        sub.textContent=fmtSize(it.size);
-        meta.appendChild(nm); meta.appendChild(sub);
-        var a=document.createElement('a');
-        a.className='play'; a.textContent='播放';
-        a.href='/play?name='+encodeURIComponent(it.name);
-        li.appendChild(meta); li.appendChild(a);
-        list.appendChild(li);
-      });
-    }).catch(function(e){ st.textContent='列表失败'; });
-  }
-  btnStart.onclick=function(){
-    fetch('/api/rec/start',{method:'POST'}).then(function(r){return r.json();}).then(function(j){
-      if(j.ok){ setRecUi(true,j.name); loadList(); }
-      else st.textContent='开始失败: '+(j.error||'');
-    });
-  };
-  btnStop.onclick=function(){
-    fetch('/api/rec/stop',{method:'POST'}).then(function(r){return r.json();}).then(function(j){
-      setRecUi(false,'');
-      if(j.error) st.textContent='结束: '+j.error;
-      loadList();
-    });
-  };
-  document.getElementById('btnRefresh').onclick=loadList;
-  loadStatus(); loadList();
-  setInterval(loadStatus, 2000);
-})();
-</script>
-</body>
-</html>
-"""
+  img.onerror = function(){ setTimeout(bump, 800); };
 
-PLAY_HTML = """<!DOCTYPE html>
-<html lang="zh-CN" data-mode="web">
-<head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Playback</title>
-<style>
-body{margin:0;background:#0b0f14;color:#e8eef5;font-family:system-ui,sans-serif;display:flex;flex-direction:column;height:100vh}
-header{padding:10px 12px;background:#121821;display:flex;align-items:center;gap:10px}
-a{color:#7ab;text-decoration:none}
-.wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:8px;background:#000}
-img{max-width:100%;max-height:100%;object-fit:contain}
-</style>
-</head>
-<body>
-<header>
-  <a href="/">← 返回</a>
-  <span id="title">playback</span>
-</header>
-<div class="wrap">
-  <img id="v" src="" alt="play" decoding="async"/>
-</div>
-<script>
-(function(){
-  var q=new URLSearchParams(location.search);
-  var name=q.get('name')||'';
-  document.getElementById('title').textContent=name;
-  document.getElementById('v').src='/api/rec/play?name='+encodeURIComponent(name)+'&t='+Date.now();
+  function fitCanvas(){
+    var w = img.naturalWidth || 320;
+    var h = img.naturalHeight || 240;
+    if (cv.width !== w || cv.height !== h) {
+      cv.width = w;
+      cv.height = h;
+    }
+  }
+
+  function drawLoop(){
+    if (!rec) return;
+    try {
+      if (img.complete && img.naturalWidth > 0) {
+        fitCanvas();
+        ctx.drawImage(img, 0, 0, cv.width, cv.height);
+      }
+    } catch (e) {}
+    drawTimer = requestAnimationFrame(drawLoop);
+  }
+
+  function setUi(recording){
+    btnStart.disabled = !!recording;
+    btnStop.disabled = !recording;
+  }
+
+  function pickMime(){
+    var cands = [
+      'video/webm;codecs=vp9',
+      'video/webm;codecs=vp8',
+      'video/webm',
+      'video/mp4'
+    ];
+    for (var i = 0; i < cands.length; i++) {
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(cands[i]))
+        return cands[i];
+    }
+    return '';
+  }
+
+  btnStart.onclick = function(){
+    if (!window.MediaRecorder) {
+      st.textContent = '此浏览器不支持 MediaRecorder，请用 Chrome';
+      return;
+    }
+    if (!img.complete || img.naturalWidth === 0) {
+      st.textContent = '等待画面…请稍后再点开始';
+      bump();
+      return;
+    }
+    fitCanvas();
+    ctx.drawImage(img, 0, 0, cv.width, cv.height);
+    var stream;
+    try {
+      stream = cv.captureStream(20);
+    } catch (e) {
+      st.textContent = 'captureStream 失败: ' + e;
+      return;
+    }
+    chunks = [];
+    var mime = pickMime();
+    try {
+      rec = mime ? new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 1200000 })
+                 : new MediaRecorder(stream);
+    } catch (e) {
+      st.textContent = 'MediaRecorder 失败: ' + e;
+      return;
+    }
+    rec.ondataavailable = function(ev){
+      if (ev.data && ev.data.size > 0) chunks.push(ev.data);
+    };
+    rec.onerror = function(ev){
+      st.textContent = '录制错误';
+    };
+    rec.onstop = function(){
+      if (drawTimer) cancelAnimationFrame(drawTimer);
+      drawTimer = null;
+      var type = (rec && rec.mimeType) ? rec.mimeType : 'video/webm';
+      var blob = new Blob(chunks, { type: type });
+      chunks = [];
+      rec = null;
+      setUi(false);
+      if (!blob.size) {
+        st.textContent = '空闲 — 未录到数据';
+        return;
+      }
+      var ext = type.indexOf('mp4') >= 0 ? 'mp4' : 'webm';
+      var a = document.createElement('a');
+      var url = URL.createObjectURL(blob);
+      a.href = url;
+      a.download = 'maix_' + Date.now() + '.' + ext;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 2000);
+      st.textContent = '已保存到手机 (' + ext + ', ' + Math.round(blob.size/1024) + ' KB)';
+    };
+    rec.start(500);
+    t0 = Date.now();
+    setUi(true);
+    st.textContent = '录制中…';
+    drawLoop();
+    var tick = setInterval(function(){
+      if (!rec) { clearInterval(tick); return; }
+      var sec = Math.floor((Date.now() - t0) / 1000);
+      st.textContent = '录制中… ' + sec + 's（画面写入手机，Maix 不存盘）';
+    }, 500);
+  };
+
+  btnStop.onclick = function(){
+    if (rec && rec.state !== 'inactive') {
+      try { rec.stop(); } catch (e) { st.textContent = '停止失败: ' + e; setUi(false); }
+    }
+  };
 })();
 </script>
 </body>
@@ -208,15 +222,11 @@ def _jpeg_bytes(img, quality):
 
 
 def _camera_loop():
-    global _latest_jpeg, _recording, _avi, _rec_name, _rec_error, _frame_i, _fps_show
+    global _latest_jpeg, _fps_show
     from maix import app
 
-    quality = int(_cfg.get("jpeg_quality", 32))
+    quality = int(_cfg.get("jpeg_quality", 50))
     interval_ms = int(_cfg.get("frame_interval_ms", 45))
-    w = int(_cfg.get("cam_w", 160))
-    h = int(_cfg.get("cam_h", 120))
-    fps_hint = max(1, int(round(1000.0 / max(1, interval_ms))))
-
     fps_t = pytime.time()
     fps_n = 0
 
@@ -232,13 +242,6 @@ def _camera_loop():
 
         with _lock:
             _latest_jpeg = raw
-            _frame_i += 1
-            if _recording and _avi is not None:
-                try:
-                    _avi.write_frame(raw)
-                except Exception as e:
-                    _rec_error = str(e)
-                    print("rec write err:", e)
 
         fps_n += 1
         now = pytime.time()
@@ -246,7 +249,7 @@ def _camera_loop():
             _fps_show = fps_n / (now - fps_t)
             fps_n = 0
             fps_t = now
-            print("web push fps: {:.1f} rec={}".format(_fps_show, _recording))
+            print("live fps: {:.1f}".format(_fps_show))
 
         elapsed = (pytime.time() - t0) * 1000.0
         rest = interval_ms - elapsed
@@ -260,10 +263,6 @@ def create_app():
     @app_flask.route("/")
     def index():
         return INDEX_HTML
-
-    @app_flask.route("/play")
-    def play_page():
-        return PLAY_HTML
 
     @app_flask.route("/stream")
     def stream():
@@ -282,150 +281,37 @@ def create_app():
                 else:
                     pytime.sleep(0.05)
                     continue
-                pytime.sleep(0.03)
+                pytime.sleep(0.02)
 
         return Response(
             gen(),
             mimetype="multipart/x-mixed-replace; boundary=frame",
-            headers={"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"},
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+                "Pragma": "no-cache",
+                "Access-Control-Allow-Origin": "*",
+            },
         )
-
-    @app_flask.route("/api/rec/status")
-    def rec_status():
-        with _lock:
-            return jsonify(
-                {
-                    "recording": _recording,
-                    "name": os.path.basename(_rec_name) if _rec_name else "",
-                    "frames": _avi.frames if _avi else 0,
-                    "error": _rec_error,
-                    "fps": round(_fps_show, 1),
-                }
-            )
-
-    @app_flask.route("/api/rec/start", methods=["POST", "GET"])
-    def rec_start():
-        global _recording, _avi, _rec_name, _rec_error
-        with _lock:
-            if _recording:
-                return jsonify({"ok": True, "name": os.path.basename(_rec_name), "msg": "already"})
-            try:
-                path = next_rec_path(REC_DIR)
-                w = int(_cfg.get("cam_w", 160))
-                h = int(_cfg.get("cam_h", 120))
-                interval_ms = int(_cfg.get("frame_interval_ms", 45))
-                fps_hint = max(1, int(round(1000.0 / max(1, interval_ms))))
-                avi = AviMjpegWriter()
-                avi.begin(path, w, h, fps_hint)
-                _avi = avi
-                _rec_name = path
-                _recording = True
-                _rec_error = ""
-                print("rec start", path)
-                return jsonify({"ok": True, "name": os.path.basename(path)})
-            except Exception as e:
-                _rec_error = str(e)
-                print("rec start fail", e)
-                return jsonify({"ok": False, "error": str(e)})
-
-    @app_flask.route("/api/rec/stop", methods=["POST", "GET"])
-    def rec_stop():
-        global _recording, _avi, _rec_name, _rec_error
-        with _lock:
-            if not _recording:
-                return jsonify({"ok": True, "msg": "idle"})
-            try:
-                name = os.path.basename(_rec_name) if _rec_name else ""
-                frames = _avi.frames if _avi else 0
-                if _avi:
-                    _avi.end()
-                _avi = None
-                _recording = False
-                print("rec stop", name, "frames", frames)
-                return jsonify({"ok": True, "name": name, "frames": frames})
-            except Exception as e:
-                _rec_error = str(e)
-                _recording = False
-                _avi = None
-                return jsonify({"ok": False, "error": str(e)})
-
-    @app_flask.route("/api/rec/list")
-    def rec_list():
-        return jsonify({"items": list_recordings(REC_DIR)})
-
-    @app_flask.route("/api/rec/play")
-    def rec_play():
-        name = request.args.get("name", "")
-        # prevent path traversal
-        name = os.path.basename(name)
-        path = os.path.join(REC_DIR, name)
-        if not name or not os.path.isfile(path):
-            return "not found", 404
-
-        boundary = b"frame"
-
-        def gen():
-            try:
-                for jpeg in iter_avi_jpeg_frames(path):
-                    if _stop:
-                        break
-                    yield (
-                        b"--" + boundary + b"\r\n"
-                        b"Content-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n"
-                    )
-                    pytime.sleep(0.06)
-            except Exception as e:
-                print("play err", e)
-
-        return Response(
-            gen(),
-            mimetype="multipart/x-mixed-replace; boundary=frame",
-            headers={"Cache-Control": "no-store"},
-        )
-
-    @app_flask.route("/rec/<path:name>")
-    def rec_download(name):
-        name = os.path.basename(name)
-        path = os.path.join(REC_DIR, name)
-        if not os.path.isfile(path):
-            return "not found", 404
-        return send_file(path, as_attachment=True, download_name=name)
 
     return app_flask
 
 
 def run_web_server(cam, cfg, ip, port=HTTP_PORT):
-    """
-    Block until app.need_exit(). Starts camera thread + Flask.
-    """
-    global _cam, _cfg, _stop, _latest_jpeg, _recording, _avi, _rec_name, _rec_error
+    global _cam, _cfg, _stop, _latest_jpeg
     from maix import app as mapp
 
     _cam = cam
     _cfg = cfg
     _stop = False
     _latest_jpeg = None
-    _recording = False
-    _avi = None
-    _rec_name = ""
-    _rec_error = ""
 
-    if not os.path.isdir(REC_DIR):
-        try:
-            os.makedirs(REC_DIR)
-        except Exception as e:
-            print("mkdir recordings fail", e)
-
-    th = threading.Thread(target=_camera_loop, name="cam-web", daemon=True)
+    th = threading.Thread(target=_camera_loop, name="cam-live", daemon=True)
     th.start()
 
     flask_app = create_app()
-    print("Flask web on http://{}:{}  (record dir {})".format(ip, port, REC_DIR))
-    print("Open phone browser: http://{}:{}".format(ip, port))
+    print("Flask live-only http://{}:{}".format(ip, port))
+    print("Record on phone only (MediaRecorder); Maix does not save files")
 
-    # Werkzeug blocking server; poll need_exit in a side thread to shutdown is hard,
-    # so use short timeout loop via werkzeug serving with use_reloader=False.
-    # Flask app.run blocks — break via need_exit by running in thread and joining with poll.
     server_error = []
 
     def _serve():
@@ -444,12 +330,4 @@ def run_web_server(cam, cfg, ip, port=HTTP_PORT):
             break
 
     _stop = True
-    with _lock:
-        if _recording and _avi:
-            try:
-                _avi.end()
-            except Exception:
-                pass
-            _recording = False
-            _avi = None
     print("web server loop end")
