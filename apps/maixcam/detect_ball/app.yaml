@@ -1,10 +1,10 @@
 id: steel_ball_detect
 name: Steel Ball Detect
 name[zh]: 钢珠检测
-version: 1.0.0
+version: 1.2.0
 author: line_tracker_car
-desc: YOLOv8 steel ball detector
-desc[zh]: 钢珠检测（YOLOv8）
+desc: YOLOv5+ByteTrack, rail s over UART
+desc[zh]: YOLOv5跟踪+白轨一维s串口
 exclude:
   - .vscode
   - dist
@@ -13,5 +13,3 @@ exclude:
 files:
   - app.yaml
   - main.py
-  - steel_ball.mud
-  - steel_ball_int8.cvimodel
