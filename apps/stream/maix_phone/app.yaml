@@ -1,17 +1,16 @@
 id: maix_phone
 name: Maix Phone Stream
-name[zh]: 钢珠检测推流(手机热点)
-version: 3.0.0
+name[zh]: MJPEG推流
+version: 4.1.0
 author: baigenshu
-desc: Path apps/stream/maix_phone; phone hotspot; YOLO11 Flask Web
-desc[zh]: 路径 apps/stream/maix_phone；连手机热点；YOLO11 钢珠检测 Web
+desc: Raw MJPEG only at /stream; no web UI
+desc[zh]: 仅 /stream MJPEG 推流，无网页
 exclude:
   - .vscode
   - dist
   - __pycache__
 files:
   - app.yaml
-  - detect_util.py
   - main.py
-  - web_server.py
+  - README.md
 icon: ''

@@ -1,205 +1,179 @@
 """
-maix_phone — MaixCAM 钢珠检测直播（连手机热点）
+maix_phone — 纯 MJPEG 推流（无网页 UI / 无 YOLO / 无 Flask）
 
-  - Phone Web：YOLO11 叠框 → Flask MJPEG；录像仅在手机
-
-模型：yolo11n_ball.mud（与 detect_ball 相同路径/加载），见 detect_util
+拉流地址（给自有 App 用）：
+  http://<MaixIP>:8000/stream
 """
 
-from maix import camera, display, image, app, time, network, err, touchscreen
+import re
+import socket
+import threading
+import time as pytime
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-# 手机个人热点（STA）
-PHONE_SSID = "Xiaomi x"
-PHONE_PASS = "20060313"
-WIFI_TIMEOUT_S = 60
+from maix import app, camera, image, time
 
-WEB_CFG = {
-    "label": "Phone Web",
-    "mode": "web",
-    "cam_w": 320,
-    "cam_h": 240,
-    "jpeg_quality": 50,
-    "frame_interval_ms": 45,
-    "preview_every": 12,
-}
+HTTP_PORT = 8000
+CAM_W, CAM_H = 320, 240
+JPEG_QUALITY = 45
+FRAME_INTERVAL_MS = 50
 
-
-def is_in_btn(x, y, btn):
-    return btn[0] <= x < btn[0] + btn[2] and btn[1] <= y < btn[1] + btn[3]
+_lock = threading.Lock()
+_jpeg = None
+_stop = False
 
 
-def draw_btn(img, btn, label, fill_rgb=(28, 32, 48)):
-    fill = image.Color.from_rgb(*fill_rgb)
-    border = image.COLOR_WHITE
-    img.draw_rect(btn[0], btn[1], btn[2], btn[3], color=fill, thickness=-1)
-    img.draw_rect(btn[0], btn[1], btn[2], btn[3], color=border, thickness=2)
+def log(msg):
+    print(msg, flush=True)
+
+
+def get_ip():
     try:
-        size = image.string_size(label, scale=1.2)
-        tx = btn[0] + max(0, (btn[2] - size.width()) // 2)
-        ty = btn[1] + max(0, (btn[3] - size.height()) // 2)
-    except Exception:
-        tx, ty = btn[0] + 8, btn[1] + 12
-    img.draw_string(tx, ty, label, color=image.COLOR_WHITE, scale=1.2)
-
-
-def draw_exit_btn(img, btn):
-    draw_btn(img, btn, "Exit", fill_rgb=(120, 40, 40))
-
-
-def map_touch(tx, ty, disp_w, disp_h, img_w, img_h):
-    if disp_w > 0 and disp_h > 0 and (disp_w != img_w or disp_h != img_h):
-        return int(tx * img_w / disp_w), int(ty * img_h / disp_h)
-    return int(tx), int(ty)
-
-
-def show_exiting(disp):
-    try:
-        dw, dh = disp.width(), disp.height()
-        img = image.Image(dw, dh)
-        img.draw_rect(0, 0, dw, dh, color=image.Color.from_rgb(10, 14, 20), thickness=-1)
-        img.draw_string(12, dh // 2 - 12, "Exiting...", color=image.COLOR_WHITE, scale=1.4)
-        disp.show(img)
-        time.sleep_ms(80)
-    except Exception:
-        pass
-
-
-def light_cleanup(reason="exit"):
-    print("cleanup:", reason)
-    try:
-        app.set_exit_flag(True)
+        import subprocess
+        out = subprocess.check_output(["ifconfig", "wlan0"], stderr=subprocess.DEVNULL)
+        text = out.decode(errors="ignore")
+        m = re.search(r"inet addr:(\d+\.\d+\.\d+\.\d+)", text)
+        if not m:
+            m = re.search(r"inet (\d+\.\d+\.\d+\.\d+)", text)
+        if m:
+            ip = m.group(1)
+            if ip not in ("0.0.0.0", "127.0.0.1"):
+                return ip
     except Exception as e:
-        print("set_exit_flag skip:", e)
-
-
-def show_message(disp, title, subtitle=""):
-    dw, dh = disp.width(), disp.height()
-    img = image.Image(dw, dh)
-    img.draw_rect(0, 0, dw, dh, color=image.Color.from_rgb(10, 14, 20), thickness=-1)
-    img.draw_string(12, dh // 2 - 24, title, color=image.COLOR_WHITE, scale=1.3)
-    if subtitle:
-        img.draw_string(12, dh // 2 + 12, subtitle[:40], color=image.Color.from_rgb(100, 200, 255), scale=1.0)
-    disp.show(img)
-
-
-def connect_wifi(ssid, password):
-    w = network.wifi.Wifi()
-    print("connect to phone hotspot:", ssid)
-    e = w.connect(ssid, password, wait=True, timeout=WIFI_TIMEOUT_S)
-    err.check_raise(e, "connect wifi failed: " + ssid)
-    ip = w.get_ip()
-    print("connected, ip:", ip)
-    return w, ip
-
-
-def run_web_mode(disp, ts, cfg, ip):
-    from web_server import run_web_server, HTTP_PORT
-    from detect_util import load_detector
-    import threading
-
-    show_message(disp, "Loading model...", "steel ball YOLO")
+        log("ifconfig skip: " + str(e))
     try:
-        detector, use_zh = load_detector()
+        from maix import network
+        ip = network.wifi.Wifi().get_ip()
+        if ip and ip not in ("0.0.0.0", "127.0.0.1", ""):
+            return ip
     except Exception as e:
-        show_message(disp, "Model failed", str(e)[:40])
-        print("load detector failed:", e)
-        time.sleep_ms(2500)
-        raise
+        log("wifi get_ip skip: " + str(e))
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        if ip and not ip.startswith("127."):
+            return ip
+    except Exception as e:
+        log("socket ip skip: " + str(e))
+    return "0.0.0.0"
 
-    cam_w = detector.input_width()
-    cam_h = detector.input_height()
-    cam_fmt = detector.input_format()
-    print("camera for detect:", cam_w, cam_h, cam_fmt)
-    cam = camera.Camera(cam_w, cam_h, cam_fmt)
 
-    stream_cfg = dict(cfg)
-    stream_cfg["cam_w"] = cam_w
-    stream_cfg["cam_h"] = cam_h
+def img_to_jpeg_bytes(img, quality):
+    try:
+        jpg = img.to_jpeg(quality=quality)
+    except TypeError:
+        try:
+            jpg = img.to_jpeg()
+        except Exception:
+            jpg = img.to_format(image.Format.FMT_JPEG)
+    if hasattr(jpg, "to_bytes"):
+        try:
+            return jpg.to_bytes()
+        except TypeError:
+            return jpg.to_bytes(True)
+    return bytes(jpg)
 
-    page_url = "http://{}:{}".format(ip, HTTP_PORT)
-    print("mode: web + steel ball detect")
-    print("page:", page_url)
 
-    ui_stop = {"v": False}
+def camera_loop(cam):
+    global _jpeg
+    log("cam loop start")
+    fps_t = pytime.time()
+    fps_n = 0
+    while not _stop and not app.need_exit():
+        t0 = pytime.time()
+        try:
+            img = cam.read()
+            raw = img_to_jpeg_bytes(img, JPEG_QUALITY)
+            with _lock:
+                _jpeg = raw
+            fps_n += 1
+        except Exception as e:
+            log("cam err: " + str(e))
+            time.sleep_ms(50)
+            continue
+        now = pytime.time()
+        if now - fps_t >= 1.0:
+            log("stream fps: {:.1f}".format(fps_n / (now - fps_t)))
+            fps_n = 0
+            fps_t = now
+        rest = FRAME_INTERVAL_MS - (pytime.time() - t0) * 1000.0
+        if rest > 1:
+            time.sleep_ms(int(rest))
+    log("cam loop end")
 
-    def ui_loop():
-        dw, dh = disp.width(), disp.height()
-        pressed_last = False
-        while not app.need_exit() and not ui_stop["v"]:
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, fmt, *args):
+        return
+
+    def do_GET(self):
+        path = self.path.split("?")[0]
+        # 只提供 MJPEG；/ 也指向同一流，方便 App 接入
+        if path in ("/", "/stream"):
+            self.send_response(200)
+            self.send_header(
+                "Content-Type", "multipart/x-mixed-replace; boundary=frame"
+            )
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
             try:
-                canvas = image.Image(dw, dh)
-                canvas.draw_rect(0, 0, dw, dh, color=image.Color.from_rgb(10, 14, 20), thickness=-1)
-                canvas.draw_string(8, 12, "DETECT+LIVE", color=image.COLOR_GREEN, scale=1.2)
-                canvas.draw_string(8, 40, ip, color=image.COLOR_WHITE, scale=1.0)
-                canvas.draw_string(
-                    8, 64, ":{}  {}x{}".format(HTTP_PORT, cam_w, cam_h),
-                    color=image.Color.from_rgb(120, 200, 255), scale=0.9,
-                )
-                canvas.draw_string(
-                    8, 90, "ball boxes on web", color=image.Color.from_rgb(160, 170, 180), scale=0.8
-                )
-                exit_btn = [dw - 100, dh - 50, 90, 40]
-                draw_exit_btn(canvas, exit_btn)
-                disp.show(canvas)
-                tx, ty, pressed = ts.read()
-                if pressed and not pressed_last:
-                    mx, my = map_touch(tx, ty, dw, dh, dw, dh)
-                    if is_in_btn(mx, my, exit_btn):
-                        app.set_exit_flag(True)
+                while not _stop and not app.need_exit():
+                    with _lock:
+                        frame = _jpeg
+                    if not frame:
+                        pytime.sleep(0.05)
+                        continue
+                    try:
+                        self.wfile.write(
+                            b"--frame\r\n"
+                            b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
+                        )
+                        self.wfile.flush()
+                    except (BrokenPipeError, ConnectionResetError, OSError):
                         break
-                pressed_last = pressed
+                    pytime.sleep(0.03)
             except Exception as e:
-                print("ui err", e)
-            time.sleep_ms(100)
-
-    th = threading.Thread(target=ui_loop, name="web-ui", daemon=True)
-    th.start()
-    try:
-        run_web_server(
-            cam, stream_cfg, ip, port=HTTP_PORT, detector=detector, use_zh=use_zh
-        )
-    finally:
-        ui_stop["v"] = True
+                log("client end: " + str(e))
+            return
+        self.send_error(404)
 
 
 def main():
-    disp = display.Display()
-    ts = touchscreen.TouchScreen()
+    global _stop
+    log("=== stream only ===")
+    ip = get_ip()
+    log("ip=" + str(ip))
 
+    cam = camera.Camera(CAM_W, CAM_H)
+    log("camera %dx%d" % (CAM_W, CAM_H))
+    img0 = cam.read()
+    raw0 = img_to_jpeg_bytes(img0, JPEG_QUALITY)
+    with _lock:
+        _jpeg = raw0
+    log("warmup %d bytes" % len(raw0))
+
+    threading.Thread(target=camera_loop, args=(cam,), name="cam", daemon=True).start()
+
+    url = "http://{}:{}/stream".format(ip, HTTP_PORT)
+    log("MJPEG: " + url)
+
+    server = ThreadingHTTPServer(("0.0.0.0", HTTP_PORT), Handler)
+    server.timeout = 0.5
     try:
-        image.load_font(
-            "sourcehansans",
-            "/maixapp/share/font/SourceHanSansCN-Regular.otf",
-            size=18,
-        )
-        image.set_default_font("sourcehansans")
-    except Exception:
+        while not app.need_exit():
+            server.handle_request()
+    except KeyboardInterrupt:
         pass
-
-    show_message(disp, "Connecting...", PHONE_SSID)
-    try:
-        _w, ip = connect_wifi(PHONE_SSID, PHONE_PASS)
-    except Exception as e:
-        show_message(disp, "WiFi failed", str(e)[:40])
-        print("wifi failed:", e)
-        time.sleep_ms(2000)
-        show_exiting(disp)
-        light_cleanup(reason="wifi failed")
-        return
-
-    if app.need_exit():
-        show_exiting(disp)
-        light_cleanup(reason="user key")
-        return
-
-    print("start web mode")
-    try:
-        run_web_mode(disp, ts, WEB_CFG, ip)
-    except Exception as e:
-        print("run error:", e)
-    show_exiting(disp)
-    light_cleanup(reason="main end")
-    print("maix_phone exited")
+    finally:
+        _stop = True
+        try:
+            server.server_close()
+        except Exception:
+            pass
+        log("exit")
 
 
 if __name__ == "__main__":
