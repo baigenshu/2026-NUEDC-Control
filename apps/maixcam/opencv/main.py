@@ -78,6 +78,9 @@ BALL_DIAM_PX = 12
 POS_ALPHA = 0.35
 Y_CENTER_WEIGHT = 20.0
 POS_HYST_MM = 0.55
+TRACK_VEL_ALPHA = 0.35
+TRACK_MAX_JUMP_MM = 28.0
+TRACK_HOLD_FRAMES = 1
 
 MODE_NAMES = ("BRI", "DRK", "AUT")
 
@@ -375,6 +378,63 @@ def quantize_mm(pos_f, last_i, has_last):
     return int(round(pos_f))
 
 
+def update_track(det, now_ms, track):
+    """Reject isolated ROI jumps with a one-dimensional constant-velocity predictor."""
+    usable = bool(det["found"]) and int(det["conf"]) >= CONF_MIN
+    if not usable:
+        track["lost"] += 1
+        if track["has"] and track["lost"] <= TRACK_HOLD_FRAMES:
+            dt = max(0.03, min(0.20, (now_ms - track["last_ms"]) / 1000.0))
+            predicted = track["pos"] + track["vel"] * dt
+            track["pos"] = predicted
+            track["last_ms"] = now_ms
+            det["found"] = True
+            det["conf"] = CONF_MIN
+            det["pos_mm"] = predicted
+            det["cx"] = mm_to_roi_x(predicted, [ROI_X, ROI_Y, ROI_W, ROI_H])
+            det["cy"] = ROI_Y + ROI_H // 2
+            return True
+        track["has"] = False
+        track["vel"] = 0.0
+        return False
+
+    raw_pos = float(det["pos_mm"])
+    if not track["has"]:
+        track["pos"] = raw_pos
+        track["vel"] = 0.0
+        track["last_ms"] = now_ms
+        track["lost"] = 0
+        track["has"] = True
+        return True
+
+    dt = max(0.03, min(0.20, (now_ms - track["last_ms"]) / 1000.0))
+    predicted = track["pos"] + track["vel"] * dt
+    innovation = raw_pos - predicted
+    max_jump = TRACK_MAX_JUMP_MM + abs(track["vel"]) * dt
+    if abs(innovation) > max_jump:
+        track["lost"] += 1
+        if track["lost"] <= TRACK_HOLD_FRAMES:
+            track["pos"] = predicted
+            track["last_ms"] = now_ms
+            det["pos_mm"] = predicted
+            det["conf"] = CONF_MIN
+            det["cx"] = mm_to_roi_x(predicted, [ROI_X, ROI_Y, ROI_W, ROI_H])
+            det["cy"] = ROI_Y + ROI_H // 2
+            return True
+        track["has"] = False
+        track["vel"] = 0.0
+        return False
+
+    updated_pos = predicted + POS_ALPHA * innovation
+    measured_vel = (updated_pos - track["pos"]) / dt
+    track["vel"] += TRACK_VEL_ALPHA * (measured_vel - track["vel"])
+    track["pos"] = updated_pos
+    track["last_ms"] = now_ms
+    track["lost"] = 0
+    det["pos_mm"] = updated_pos
+    return True
+
+
 def pack_ball_frame(found, pos_mm, cx, cy, conf, mode):
     """type=0x02；pos_mm 为整毫米（线格式 i16，单位 1mm）。"""
     conf_i = max(0, min(100, int(conf)))
@@ -573,6 +633,7 @@ def main():
     pressed_last = False
     err_cnt = 0
     last_log_ms = 0
+    track = {"has": False, "pos": 0.0, "vel": 0.0, "last_ms": 0, "lost": 0}
 
     if serial_dev is not None:
         if uart_write(serial_dev, pack_setpoint_frame(sp_mm)):
@@ -591,8 +652,10 @@ def main():
             exit_btn, set_btn, reset_btn = layout_controls(iw, ih)
             drag_strip = layout_drag_strip(iw, ih, roi, exit_btn)
             det = detect_ball(bgr, roi, mode)
+            now_ms = time.ticks_ms()
+            track_usable = update_track(det, now_ms, track)
 
-            usable = bool(det["found"]) and int(det["conf"]) >= CONF_MIN
+            usable = track_usable and bool(det["found"]) and int(det["conf"]) >= CONF_MIN
             if usable:
                 if not has_filt:
                     pos_filt = float(det["pos_mm"])
@@ -656,7 +719,6 @@ def main():
             )
             disp.show(img)
 
-            now_ms = time.ticks_ms()
             if serial_dev is not None and (now_ms - last_tx_ms) >= TX_MIN_MS:
                 if sp_pending:
                     if uart_write(serial_dev, pack_setpoint_frame(sp_mm)):

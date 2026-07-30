@@ -16,7 +16,7 @@
 
 | type | 内容 | 周期 |
 |------|------|------|
-| `0x02` | 球位 pos 0.1mm + conf + cx/cy | ≥20 ms |
+| `0x02` | 球位 pos 1mm + conf + cx/cy | ≥20 ms |
 | `0x12` | 停球定点（屏 **SP** 键 / 上电同步） | 变更时 |
 
 - `conf < 30` 强制 `found=0`（与 MCU `BALL_CONF_MIN` 一致）
