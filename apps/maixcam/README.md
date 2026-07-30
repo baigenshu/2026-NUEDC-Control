@@ -15,8 +15,8 @@ apps/maixcam/
 | 目录 | 作用 | 设备依赖 |
 |------|------|----------|
 | `collect/` | 拍图存 `/root/datasets/detect/` | 无模型 |
-| `detect_ball/` | 钢珠检测（本机屏） | `steel_ball.mud` + `.cvimodel` |
-| `../stream/maix_esp32/video_send/` | 钢珠检测 **网页直播** + 手机录 | 同上模型（拷到该目录或 `/root/models`） |
+| `detect_ball/` | YOLO11+ByteTrack+轨精修→s 串口 | `/root/models/2026H/steel_ball_v11n/yolo11n_ball.mud` |
+| `../stream/maix_phone/` | 钢珠检测 **Web**（连手机热点） | 同上 YOLO11 模型 |
 | `red_track/` | 色块跟踪 + 姿态串口 | 云台 UART |
 | `tools/` | 在 PC 上跑 | pyserial |
 
