@@ -149,6 +149,16 @@ static void arm_motion(int32_t target)
         s_phase = STEP_PHASE_IDLE;
         s_move_dir = 0;
         DL_GPIO_clearPins(GPIO_STEPPER_PORT, GPIO_STEPPER_STEP_PIN);
+        DL_TimerG_stopCounter(STEP_TIM_INST);
+        return;
+    }
+
+    /* A running pulse owns DIR; the ISR handles a reversal at a step boundary. */
+    if (s_busy && s_move_dir != 0) {
+        if ((delta > 0 && s_move_dir > 0) ||
+            (delta < 0 && s_move_dir < 0)) {
+            update_speed_profile();
+        }
         return;
     }
 
@@ -231,6 +241,7 @@ void Stepper_Stop(void)
     s_phase = STEP_PHASE_IDLE;
     s_move_dir = 0;
     DL_GPIO_clearPins(GPIO_STEPPER_PORT, GPIO_STEPPER_STEP_PIN);
+    DL_TimerG_stopCounter(STEP_TIM_INST);
 }
 
 void Stepper_EmergencyStop(void)
@@ -376,15 +387,26 @@ void Stepper_OnTimerTick(void)
             s_move_dir = 0;
             DL_GPIO_clearPins(GPIO_STEPPER_PORT, GPIO_STEPPER_STEP_PIN);
             apply_period_from_sps(STEPPER_START_SPS);
+            DL_TimerG_stopCounter(STEP_TIM_INST);
             return;
         }
 
-        /* keep DIR consistent if target flipped mid-move */
+        /* Keep DIR consistent if target flipped mid-move. */
         {
             int8_t nd = (s_target > s_pos) ? 1 : -1;
             if (nd != s_move_dir) {
-                /* reverse: drop speed then flip */
-                apply_period_from_sps(STEPPER_START_SPS);
+                /* Reverse only after reaching the low-speed floor. */
+                if (s_cur_sps > STEPPER_START_SPS) {
+                    uint32_t dec = s_accel / (s_cur_sps > 0u ? s_cur_sps : 1u);
+                    if (dec < 1u)
+                        dec = 1u;
+                    if (s_cur_sps > STEPPER_START_SPS + dec)
+                        apply_period_from_sps(s_cur_sps - dec);
+                    else
+                        apply_period_from_sps(STEPPER_START_SPS);
+                    s_phase = STEP_PHASE_HIGH;
+                    return;
+                }
                 s_move_dir = nd;
                 apply_dir_pin(s_move_dir);
             }

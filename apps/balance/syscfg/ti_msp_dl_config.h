@@ -86,6 +86,26 @@ extern "C" {
 
 
 
+/* Defines for VISION_UART */
+#define VISION_UART_INST                                                   UART0
+#define VISION_UART_INST_FREQUENCY                                      40000000
+#define VISION_UART_INST_IRQHandler                             UART0_IRQHandler
+#define VISION_UART_INST_INT_IRQN                                 UART0_INT_IRQn
+#define GPIO_VISION_UART_RX_PORT                                           GPIOA
+#define GPIO_VISION_UART_TX_PORT                                           GPIOA
+#define GPIO_VISION_UART_RX_PIN                                   DL_GPIO_PIN_31
+#define GPIO_VISION_UART_TX_PIN                                   DL_GPIO_PIN_28
+#define GPIO_VISION_UART_IOMUX_RX                                 (IOMUX_PINCM6)
+#define GPIO_VISION_UART_IOMUX_TX                                 (IOMUX_PINCM3)
+#define GPIO_VISION_UART_IOMUX_RX_FUNC                  IOMUX_PINCM6_PF_UART0_RX
+#define GPIO_VISION_UART_IOMUX_TX_FUNC                  IOMUX_PINCM3_PF_UART0_TX
+#define VISION_UART_BAUD_RATE                                           (115200)
+#define VISION_UART_IBRD_40_MHZ_115200_BAUD                                 (21)
+#define VISION_UART_FBRD_40_MHZ_115200_BAUD                                 (45)
+
+
+
+
 
 /* Port definition for Pin Group GPIO_STEPPER */
 #define GPIO_STEPPER_PORT                                                (GPIOA)
@@ -109,6 +129,7 @@ void SYSCFG_DL_initPower(void);
 void SYSCFG_DL_GPIO_init(void);
 void SYSCFG_DL_SYSCTL_init(void);
 void SYSCFG_DL_STEP_TIM_init(void);
+void SYSCFG_DL_VISION_UART_init(void);
 
 void SYSCFG_DL_SYSTICK_init(void);
 

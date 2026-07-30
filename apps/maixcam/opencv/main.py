@@ -1,18 +1,23 @@
 """
-MaixCAM：OpenCV 钢珠位置检测 → UART 发给摆杆主控
+MaixCAM：OpenCV 钢珠位置 → UART → balance 摆杆主控（闭环停球）
+
+对接文档：
+  apps/balance/docs/vision_proto.md
+  apps/balance/src/Hardware/Inc/ball_proto.h
 
 算法：
-  - 固定凹槽 ROI
-  - 灰度阈值（亮/暗/自动）+ 形态学 + 轮廓质心
-  - 失败回退 1D 轴向投影
-  - 像素 → 相对 O 的 mm（0.1mm 上报）
+  - 固定凹槽 ROI + 灰度/轮廓/1D 投影
+  - 像素 → 相对 O 的 mm，**整 mm** 量化上报（type=0x02）
 
-帧格式 type=0x02（13 字节，小端）：
-  AA 55 | type=0x02 | flags | pos_01mm i16 | cx i16 | cy i16
-        | conf u8 | mode u8 | checksum
-  flags bit0=found；pos_01mm 单位 0.1mm；checksum=sum(body)&0xFF
+帧（定长 13B，小端）：
+  球位 0x02: AA 55 | 02 | flags | pos_mm i16 | cx i16 | cy i16 | conf | mode | csum
+  定点 0x12: AA 55 | 12 | 00 | target_mm i16 | pad×6 | csum
+  pos/target 单位 = **1 mm**（整毫米，抑抖）；csum=sum(body)&0xFF
 
-接线 3.3V：A16 TX → MCU RX，GND 共地（Pro 同）
+接线 3.3V 共地：
+  MaixCAM A16 TX → balance PA31 (UART0 RX)
+  MaixCAM A17 RX → balance PA28 (可选)
+  MaixCAM2: A21/A22 → UART4
 """
 
 from maix import camera, display, image, app, time, touchscreen, sys, err
@@ -28,7 +33,6 @@ except Exception as e:
     print("[ball] import cv2 FAIL:", e)
     raise
 
-# 可选串口（失败不退出）
 try:
     from maix import pinmap, uart
     HAS_UART_MOD = True
@@ -36,28 +40,44 @@ except Exception as e:
     print("[ball] uart module missing:", e)
     HAS_UART_MOD = False
 
+# ---------- 与 ball_proto / vision_proto 对齐 ----------
 ENABLE_UART = True
+PROTO_MAGIC0 = 0xAA
+PROTO_MAGIC1 = 0x55
+PROTO_TYPE_BALL = 0x02
+PROTO_TYPE_SETPOINT = 0x12
+PROTO_FLAG_FOUND = 0x01
+# 与 MCU BALL_CONF_MIN 一致：低于此视为丢球
+CONF_MIN = 30
+TX_MIN_MS = 20            # ≤50 Hz，MCU 超时 100 ms
+BAUD = 115200
+
 CAM_W, CAM_H = 320, 240
-TX_MIN_MS = 20
 
-# 凹槽 ROI：只罩白色摆杆，别把上方模块框进来（按实装微调 ROI_Y/H）
-ROI_X, ROI_Y, ROI_W, ROI_H = 25, 108, 270, 28
-BAR_LEN_MM = 250.0
+# 凹槽 ROI：用户已标定＝完整有效行程（勿改四数）
+# 中线=O；品红线=停球定点；球=小点
+ROI_X, ROI_Y, ROI_W, ROI_H = 33, 128, 260, 14
+BAR_LEN_MM = 234.0          # 框内左右总长实测
 O_OFFSET_PX = ROI_W // 2
+SP_MIN_MM = int(-BAR_LEN_MM * 0.5)
+SP_MAX_MM = int(BAR_LEN_MM * 0.5)
 
-# 0 bright(高光) / 1 dark(白底黑球，默认) / 2 auto
+ENABLE_PROJ_FALLBACK = True
+PROJ_MIN_CONTRAST = 10.0
+PROJ_SCORE_SCALE = 2.0
+
 DETECT_MODE = 1
-TH_BRIGHT = 200          # 高光球
-TH_DARK = 110            # 白杆上偏暗的钢珠
-TH_BAR_WHITE = 130       # 判定“在白色摆杆上”的灰度下限
-MIN_AREA = 25
-MAX_AREA = 500           # 球约 1cm，拒大块模块
-MIN_CIRCULARITY = 0.45
-MAX_ASPECT = 1.8         # |w/h| 接近圆
-BALL_DIAM_PX = 14
+TH_BRIGHT = 200
+TH_DARK = 115
+TH_BAR_WHITE = 120
+MIN_AREA = 12
+MAX_AREA = 500
+MIN_CIRCULARITY = 0.28
+MAX_ASPECT = 2.4
+BALL_DIAM_PX = 12
 POS_ALPHA = 0.35
-# 质心越靠近 ROI 竖直中线加分（压在凹槽上）
-Y_CENTER_WEIGHT = 25.0
+Y_CENTER_WEIGHT = 20.0
+POS_HYST_MM = 0.55
 
 MODE_NAMES = ("BRI", "DRK", "AUT")
 
@@ -108,13 +128,29 @@ def setup_uart_safe():
             else:
                 print(f"[ball] pinmap {pin}->{func}")
 
-        ser = uart.UART(device, 115200)
+        ser = uart.UART(device, BAUD)
+        # 文本握手：MCU 状态机忽略非 AA 55
         ser.write_str("BALL ready\r\n")
-        print("[ball] UART open", device)
+        print("[ball] UART open", device, BAUD, "→ balance PA31 RX")
         return ser
     except Exception as e:
         print("[ball] UART fail (continue without):", e)
         return None
+
+
+def _i16(v):
+    v = int(round(v))
+    if v > 32767:
+        return 32767
+    if v < -32768:
+        return -32768
+    return v
+
+
+def _frame_with_csum(body: bytes) -> bytes:
+    """body 必须 10 字节（type..末字段），返回 13 字节整帧。"""
+    assert len(body) == 10
+    return bytes([PROTO_MAGIC0, PROTO_MAGIC1]) + body + bytes([sum(body) & 0xFF])
 
 
 def clamp_roi(x, y, w, h, iw, ih):
@@ -132,10 +168,12 @@ def px_to_mm(cx_roi, roi_w, o_px, bar_len_mm):
 
 
 def _best_blob(mask, gray=None):
-    """在 mask 里找最像钢珠的小圆斑；gray 用于加分（更暗更好）。"""
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=1)
+    """在 mask 里找最像钢珠的斑（细 ROI 下形态学要轻，避免球被腐蚀没）。"""
+    # 细框 H≈16：只用 1 次 close 粘连，open 用 2x2 以免抹掉小球
+    k_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    k_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, k_close, iterations=1)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, k_open, iterations=1)
     cnts = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     contours = cnts[0] if len(cnts) == 2 else cnts[1]
     best = None
@@ -150,6 +188,7 @@ def _best_blob(mask, gray=None):
         x, y, bw, bh = cv2.boundingRect(c)
         if bw < 1 or bh < 1:
             continue
+        # 细 ROI 里球常被裁成扁椭圆
         aspect = max(bw, bh) / float(min(bw, bh))
         if aspect > MAX_ASPECT:
             continue
@@ -165,12 +204,10 @@ def _best_blob(mask, gray=None):
         cx = m["m10"] / m["m00"]
         cy = m["m01"] / m["m00"]
 
-        # 圆度 + 尺寸接近期望球 + 靠近凹槽中线
         size_score = 30.0 * max(0.0, 1.0 - abs(area - target_area) / max(target_area, 1.0))
         y_score = Y_CENTER_WEIGHT * max(0.0, 1.0 - abs(cy - y_mid) / max(y_mid, 1.0))
         dark_score = 0.0
         if gray is not None:
-            # 取邻域均值，越暗（相对白杆）越好
             x0 = max(0, int(cx) - 2)
             x1 = min(gray.shape[1], int(cx) + 3)
             y0 = max(0, int(cy) - 2)
@@ -185,7 +222,7 @@ def _best_blob(mask, gray=None):
 
 
 def _proj_dark_on_bar(gray, bar_mask):
-    """白杆上沿轴向找最暗谷（钢珠）。"""
+    """白杆上沿轴向找最暗谷（钢珠）；ROI 全宽有效，仅避开卷积半窗。"""
     h, w = gray.shape[:2]
     if w < 4 or h < 2:
         return None
@@ -198,13 +235,15 @@ def _proj_dark_on_bar(gray, bar_mask):
     kernel = np.ones(win, dtype=np.float32) / float(win)
     smooth = np.convolve(proj, kernel, mode="same")
     lo, hi = half, w - half
+    if hi <= lo + 2:
+        lo, hi = 0, w
     if hi <= lo:
         return None
     # 只在杆像素足够的列上找
     col_ok = (bar_mask > 0).sum(axis=0) >= max(2, h // 4)
     seg = smooth[lo:hi].copy()
     for i in range(lo, hi):
-        if not col_ok[i]:
+        if i < len(col_ok) and not col_ok[i]:
             seg[i - lo] = 1e6
     if float(np.min(seg)) >= 1e5:
         return None
@@ -212,13 +251,13 @@ def _proj_dark_on_bar(gray, bar_mask):
     val = float(smooth[idx])
     base = float(np.median(smooth[col_ok])) if col_ok.any() else float(np.median(smooth[lo:hi]))
     contrast = base - val  # 球应比杆暗
-    if contrast < 8.0:
+    if contrast < float(PROJ_MIN_CONTRAST):
         return None
     # y：该列杆像素的中心
     col = bar_mask[:, idx]
     ys = np.where(col > 0)[0]
     cy = float(ys.mean()) if len(ys) else h * 0.5
-    score = min(100.0, contrast * 2.5)
+    score = min(95.0, 25.0 + contrast * float(PROJ_SCORE_SCALE))
     return (score, float(idx), cy)
 
 
@@ -238,52 +277,66 @@ def detect_ball(bgr, roi, mode):
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
     else:
         gray = crop
+    # 细 ROI 轻度模糊即可
     gray = cv2.GaussianBlur(gray, (3, 3), 0)
 
-    # 白色摆杆掩膜：排除上方深色模块
+    # 白色摆杆掩膜（核随高度缩小，避免 H=16 时 open 掏空）
     _, bar_mask = cv2.threshold(gray, TH_BAR_WHITE, 255, cv2.THRESH_BINARY)
-    bar_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 3))
+    bh = max(2, min(3, gray.shape[0] // 4))
+    bar_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, bh))
     bar_mask = cv2.morphologyEx(bar_mask, cv2.MORPH_CLOSE, bar_kernel, iterations=1)
-    bar_mask = cv2.morphologyEx(bar_mask, cv2.MORPH_OPEN, bar_kernel, iterations=1)
+    if gray.shape[0] >= 12:
+        bar_mask = cv2.morphologyEx(bar_mask, cv2.MORPH_OPEN, bar_kernel, iterations=1)
 
     candidates = []
     modes = (0, 1) if mode == 2 else (mode,)
     for mu in modes:
         if mu == 0:
-            # 高光：很亮的小点，且应落在杆附近
             _, msk = cv2.threshold(gray, TH_BRIGHT, 255, cv2.THRESH_BINARY)
             msk = cv2.bitwise_and(msk, bar_mask)
         else:
-            # 白底暗球：暗于 TH_DARK，且必须在白杆区域内（或紧邻）
-            # 稍膨胀 bar，避免球把杆“挖空”后被裁掉
-            bar_dil = cv2.dilate(bar_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7)))
+            # 暗球：阈值 + 相对杆面偏暗；bar 大膨胀，球挖空处仍保留
+            bar_dil = cv2.dilate(
+                bar_mask,
+                cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 5)),
+            )
             _, dark = cv2.threshold(gray, TH_DARK, 255, cv2.THRESH_BINARY_INV)
+            # 补充：比局部中值更暗（细框内绝对阈值常不够）
+            med = cv2.medianBlur(gray, 5)
+            diff = cv2.subtract(med, gray)  # 正值 = 比邻域暗
+            _, rel = cv2.threshold(diff, 10, 255, cv2.THRESH_BINARY)
+            dark = cv2.bitwise_or(dark, rel)
             msk = cv2.bitwise_and(dark, bar_dil)
         blob = _best_blob(msk, gray)
         if blob is not None:
             candidates.append((blob, mu, "blob"))
 
     if candidates:
+        # ROI 全宽有效，不再做左右/行程死区过滤
         best, mode_used, via = max(candidates, key=lambda t: t[0][0])
         score, cx_r, cy_r, _area, bbox_r = best
         bx, by, bw, bh = bbox_r
+        pmm = px_to_mm(cx_r, rw, O_OFFSET_PX, BAR_LEN_MM)
         return {
             "found": True,
             "cx": int(round(cx_r + rx)),
             "cy": int(round(cy_r + ry)),
-            "pos_mm": px_to_mm(cx_r, rw, O_OFFSET_PX, BAR_LEN_MM),
+            "pos_mm": pmm,
             "conf": int(max(0, min(100, score))),
             "bbox": (bx + rx, by + ry, bw, bh),
             "mode_used": mode_used,
             "via": via,
         }
 
-    # 回退：白杆 1D 暗谷
+    if not ENABLE_PROJ_FALLBACK:
+        return _empty(mode)
+
     pk = _proj_dark_on_bar(gray, bar_mask)
     if pk is None:
         return _empty(mode)
 
     score, cx_r, cy_r = pk
+    pmm = px_to_mm(cx_r, rw, O_OFFSET_PX, BAR_LEN_MM)
     r = max(4, BALL_DIAM_PX // 2)
     cx = int(round(cx_r + rx))
     cy = int(round(cy_r + ry))
@@ -291,7 +344,7 @@ def detect_ball(bgr, roi, mode):
         "found": True,
         "cx": cx,
         "cy": cy,
-        "pos_mm": px_to_mm(cx_r, rw, O_OFFSET_PX, BAR_LEN_MM),
+        "pos_mm": pmm,
         "conf": int(max(0, min(100, score))),
         "bbox": (cx - r, cy - r, r * 2, r * 2),
         "mode_used": 1,
@@ -312,183 +365,328 @@ def _empty(mode):
     }
 
 
+def quantize_mm(pos_f, last_i, has_last):
+    """浮点 mm → 整 mm；带滞回，减少 ±1mm 来回跳。"""
+    if not has_last:
+        return int(round(pos_f))
+    # 仍在 last±HYST 内则保持
+    if abs(pos_f - float(last_i)) < float(POS_HYST_MM):
+        return int(last_i)
+    return int(round(pos_f))
+
+
 def pack_ball_frame(found, pos_mm, cx, cy, conf, mode):
-    flags = 0x01 if found else 0x00
-
-    def i16(v):
-        v = int(round(v))
-        return 32767 if v > 32767 else (-32768 if v < -32768 else v)
-
+    """type=0x02；pos_mm 为整毫米（线格式 i16，单位 1mm）。"""
+    conf_i = max(0, min(100, int(conf)))
+    usable = bool(found) and conf_i >= CONF_MIN
+    flags = PROTO_FLAG_FOUND if usable else 0x00
+    pos_i = int(pos_mm) if usable else 0
     body = struct.pack(
         "<BBhhhBB",
-        0x02,
+        PROTO_TYPE_BALL,
         flags,
-        i16(pos_mm * 10.0),
-        i16(cx),
-        i16(cy),
-        max(0, min(255, int(conf))),
+        _i16(pos_i),
+        _i16(cx) if usable else 0,
+        _i16(cy) if usable else 0,
+        conf_i if usable else 0,
         max(0, min(255, int(mode))),
     )
-    return bytes([0xAA, 0x55]) + body + bytes([sum(body) & 0xFF])
+    return _frame_with_csum(body)
+
+
+def pack_setpoint_frame(target_mm):
+    """type=0x12 停球定点，单位整 mm。"""
+    body = struct.pack("<BBh", PROTO_TYPE_SETPOINT, 0x00, _i16(int(round(target_mm)))) + bytes(6)
+    return _frame_with_csum(body)
+
+
+def uart_write(ser, data: bytes) -> bool:
+    if ser is None or not data:
+        return False
+    try:
+        ser.write(data)
+        return True
+    except Exception as e:
+        print("[ball] UART write fail:", e)
+        return False
+
+
+def mm_to_roi_x(pos_mm, roi):
+    """O 相对 mm → 画面 x。"""
+    rx, _ry, rw, _rh = roi
+    if BAR_LEN_MM <= 1e-6 or rw <= 1:
+        return rx + O_OFFSET_PX
+    cx_r = float(O_OFFSET_PX) + float(pos_mm) * (float(rw) / BAR_LEN_MM)
+    return int(round(rx + cx_r))
+
+
+def roi_x_to_mm(x, roi):
+    """触摸 x → 相对 O 的 mm（可超框则钳位到杆长半幅）。"""
+    rx, _ry, rw, _rh = roi
+    if rw <= 1 or BAR_LEN_MM <= 1e-6:
+        return 0
+    cx_r = float(x) - float(rx)
+    mm = (cx_r - float(O_OFFSET_PX)) * (BAR_LEN_MM / float(rw))
+    if mm > SP_MAX_MM:
+        return SP_MAX_MM
+    if mm < SP_MIN_MM:
+        return SP_MIN_MM
+    return int(round(mm))
 
 
 def is_in_button(x, y, btn):
-    return btn[0] < x < btn[0] + btn[2] and btn[1] < y < btn[1] + btn[3]
+    return btn[0] <= x <= btn[0] + btn[2] and btn[1] <= y <= btn[1] + btn[3]
 
 
-def draw_button(img, btn, label):
-    img.draw_rect(btn[0], btn[1], btn[2], btn[3], image.Color.from_rgb(28, 32, 48), -1)
-    img.draw_rect(btn[0], btn[1], btn[2], btn[3], image.COLOR_WHITE, 2)
-    size = image.string_size(label, scale=1.0)
-    tx = btn[0] + (btn[2] - size.width()) // 2
-    ty = btn[1] + (btn[3] - size.height()) // 2
-    img.draw_string(tx, ty, label, image.COLOR_WHITE, scale=1.0)
+def map_touch_to_image(tx, ty, img_w, img_h, disp_w, disp_h):
+    """触摸在显示坐标 → 相机/叠加图像坐标（与 collect 一致）。"""
+    if disp_w > 0 and disp_h > 0 and (disp_w != img_w or disp_h != img_h):
+        return int(tx * img_w / disp_w), int(ty * img_h / disp_h)
+    return int(tx), int(ty)
 
 
-def draw_overlay(img, roi, det, pos_filt, mode, fps, uart_ok):
+def layout_controls(img_w, img_h):
+    """Bottom bar: Exit | Set | Done/Reset — all English labels."""
+    by = img_h - 36
+    bh = 30
+    gap = 6
+    exit_btn = [6, by, 52, bh]
+    set_btn = [exit_btn[0] + exit_btn[2] + gap, by, 72, bh]
+    reset_btn = [set_btn[0] + set_btn[2] + gap, by, 72, bh]
+    return exit_btn, set_btn, reset_btn
+
+
+def layout_drag_strip(img_w, img_h, roi, exit_btn):
+    """Drag strip shown only in Set mode."""
     rx, ry, rw, rh = roi
-    img.draw_rect(rx, ry, rw, rh, image.Color.from_rgb(80, 180, 255), 2)
-    ox = rx + O_OFFSET_PX
-    img.draw_line(ox, ry, ox, ry + rh, image.Color.from_rgb(255, 220, 80), 1)
+    strip_y = min(exit_btn[1] - 34, ry + rh + 8)
+    if strip_y < ry + rh + 2:
+        strip_y = ry + rh + 2
+    strip_h = 26
+    if strip_y + strip_h > exit_btn[1] - 4:
+        strip_h = max(18, exit_btn[1] - 4 - strip_y)
+    return [rx, strip_y, rw, strip_h]
 
-    if det["found"]:
-        if det["bbox"] is not None:
-            bx, by, bw, bh = det["bbox"]
-            img.draw_rect(bx, by, bw, bh, image.COLOR_GREEN, 2)
-        img.draw_circle(det["cx"], det["cy"], 4, image.COLOR_GREEN, -1)
-        status = "LOCK"
+
+def hit_drag_zone(x, y, roi, drag_strip):
+    """Bar or drag strip (Set mode only)."""
+    rx, ry, rw, rh = roi
+    if (rx - 4) <= x <= (rx + rw + 4) and (ry - 10) <= y <= (ry + rh + 10):
+        return True
+    return is_in_button(x, y, drag_strip)
+
+
+def draw_btn(img, btn, label, active=False, danger=False):
+    bx, by, bw, bh = btn
+    if danger:
+        bg = image.Color.from_rgb(70, 36, 36)
+    elif active:
+        bg = image.Color.from_rgb(40, 90, 70)
     else:
-        status = "----"
+        bg = image.Color.from_rgb(36, 36, 48)
+    img.draw_rect(bx, by, bw, bh, bg, -1)
+    border = image.Color.from_rgb(80, 220, 140) if active else image.COLOR_WHITE
+    img.draw_rect(bx, by, bw, bh, border, 1)
+    img.draw_string(bx + 6, by + 6, label, image.COLOR_WHITE, scale=1.0)
 
-    uflag = "U1" if uart_ok else "U0"
-    line = f"{status} {pos_filt:+6.1f}mm c={det['conf']:3d} {MODE_NAMES[mode]} {det['via']} {uflag}"
-    img.draw_string(4, 4, line, image.COLOR_WHITE, scale=1.05)
+
+def draw_ui(img, roi, det, pos_mm_i, sp_mm, usable,
+            exit_btn, set_btn, reset_btn, drag_strip,
+            set_mode, dragging, fps):
+    """ROI + center + SP (edit only in Set mode) + FPS + bottom buttons (EN)."""
+    rx, ry, rw, rh = roi
+    img.draw_rect(rx, ry, rw, rh, image.Color.from_rgb(80, 180, 255), 1)
+
+    ox = rx + O_OFFSET_PX
+    img.draw_line(ox, ry - 6, ox, ry + rh + 6, image.Color.from_rgb(255, 220, 80), 1)
+
+    if set_mode:
+        sx = mm_to_roi_x(sp_mm, roi)
+        col_sp = image.Color.from_rgb(255, 64, 180)
+        img.draw_line(sx, ry - 10, sx, ry + rh + 10, col_sp, 2)
+        img.draw_circle(sx, ry + rh // 2, 5, col_sp, -1)
+
+        dsx, dsy, dsw, dsh = drag_strip
+        bar_bg = image.Color.from_rgb(36, 36, 48)
+        bar_fg = col_sp if dragging else image.Color.from_rgb(140, 140, 160)
+        img.draw_rect(dsx, dsy, dsw, dsh, bar_bg, -1)
+        img.draw_rect(dsx, dsy, dsw, dsh, bar_fg, 1)
+        img.draw_rect(max(dsx, sx - 4), dsy, 8, dsh, col_sp, -1)
+        img.draw_string(
+            dsx + 4, dsy + 4,
+            "Drag to set",
+            image.Color.from_rgb(200, 200, 210),
+            scale=0.9,
+        )
+    else:
+        sx = mm_to_roi_x(sp_mm, roi)
+        img.draw_line(
+            sx, ry, sx, ry + rh,
+            image.Color.from_rgb(160, 80, 140), 1,
+        )
+
+    if usable and det.get("found"):
+        img.draw_circle(int(det["cx"]), int(det["cy"]), 3, image.COLOR_GREEN, -1)
+
+    mode_tag = " SET" if set_mode else ""
+    if usable:
+        txt = f"Ball {pos_mm_i:+d} mm   SP {sp_mm:+d} mm{mode_tag}"
+    else:
+        txt = f"Ball ----   SP {sp_mm:+d} mm{mode_tag}"
+    img.draw_string(6, 4, txt, image.COLOR_WHITE, scale=1.1)
+
+    # Top-right live FPS
+    fps_txt = f"{fps:4.1f} FPS"
+    fps_x = max(6, img.width() - 92)
     img.draw_string(
-        max(4, img.width() - 78), 4,
-        f"{fps:4.1f}FPS",
-        image.Color.from_rgb(160, 200, 255),
-        scale=1.0,
+        fps_x, 4, fps_txt,
+        image.Color.from_rgb(120, 200, 255), scale=1.1,
     )
 
-    w, h = img.width(), img.height()
-    btn_h, gap = 36, 4
-    yb = h - btn_h - 2
-    tw = (w - gap * 4) // 3
-    exit_btn = [gap, yb, tw, btn_h]
-    mode_btn = [gap * 2 + tw, yb, tw, btn_h]
-    roi_btn = [gap * 3 + tw * 2, yb, tw, btn_h]
-    draw_button(img, exit_btn, "Exit")
-    draw_button(img, mode_btn, f"Md:{MODE_NAMES[mode]}")
-    draw_button(img, roi_btn, "ROI y")
-    return exit_btn, mode_btn, roi_btn
+    draw_btn(img, exit_btn, "Exit", danger=True)
+    draw_btn(img, set_btn, "Done" if set_mode else "Set", active=set_mode)
+    draw_btn(img, reset_btn, "Reset")
 
 
 def main():
     disp = setup_display()
-    show_boot(disp, "Ball OpenCV starting...")
+    show_boot(disp, "Ball control...")
 
     serial_dev = setup_uart_safe()
-    show_boot(disp, "Opening camera...")
-
-    # 官方推荐：BGR 直接给 OpenCV，少一次转换
     cam = camera.Camera(CAM_W, CAM_H, image.Format.FMT_BGR888)
-    print("[ball] camera", cam.width(), "x", cam.height(), cam.format())
+    print("[ball] camera", cam.width(), "x", cam.height(), "bar", BAR_LEN_MM, "mm")
+    print("[ball] display", disp.width(), "x", disp.height())
 
     ts = touchscreen.TouchScreen()
-    show_boot(disp, "Running...")
 
     roi = [ROI_X, ROI_Y, ROI_W, ROI_H]
     mode = DETECT_MODE
     pos_filt = 0.0
+    pos_mm_i = 0
     has_filt = False
+    has_mm_i = False
     last_tx_ms = 0
+    sp_mm = 0
+    sp_pending = True          # 上电只同步一次 sp=0
+    set_mode = False           # 默认不开启设目标/拖动
+    dragging_sp = False
     pressed_last = False
-    roi_nudge = 0
-    frame_i = 0
     err_cnt = 0
+    last_log_ms = 0
 
-    print("[ball] loop start")
+    if serial_dev is not None:
+        if uart_write(serial_dev, pack_setpoint_frame(sp_mm)):
+            sp_pending = False
+            print("[ball] SP sync 0 mm")
+
+    print("[ball] UI EN: Exit | Set/Done | Reset")
 
     while not app.need_exit():
         try:
             img = cam.read()
-            # BGR 相机：ensure_bgr=False；copy=True 更稳
-            bgr = image.image2cv(img, ensure_bgr=False, copy=True)
+            iw, ih = img.width(), img.height()
+            bgr = image.image2cv(img, ensure_bgr=False, copy=False)
 
-            roi[0], roi[1], roi[2], roi[3] = clamp_roi(
-                roi[0], roi[1], roi[2], roi[3], bgr.shape[1], bgr.shape[0]
-            )
+            roi[0], roi[1], roi[2], roi[3] = ROI_X, ROI_Y, ROI_W, ROI_H
+            exit_btn, set_btn, reset_btn = layout_controls(iw, ih)
+            drag_strip = layout_drag_strip(iw, ih, roi, exit_btn)
             det = detect_ball(bgr, roi, mode)
 
-            if det["found"]:
+            usable = bool(det["found"]) and int(det["conf"]) >= CONF_MIN
+            if usable:
                 if not has_filt:
-                    pos_filt = det["pos_mm"]
+                    pos_filt = float(det["pos_mm"])
                     has_filt = True
                 else:
-                    pos_filt = POS_ALPHA * det["pos_mm"] + (1.0 - POS_ALPHA) * pos_filt
-                pos_tx = pos_filt
+                    pos_filt = POS_ALPHA * float(det["pos_mm"]) + (1.0 - POS_ALPHA) * pos_filt
+                pos_mm_i = quantize_mm(pos_filt, pos_mm_i, has_mm_i)
+                has_mm_i = True
             else:
                 has_filt = False
-                pos_tx = 0.0
+                has_mm_i = False
                 pos_filt = 0.0
+                pos_mm_i = 0
 
+            tx, ty, pressed = ts.read()
+            mx, my = map_touch_to_image(tx, ty, iw, ih, disp.width(), disp.height())
+
+            if pressed and not pressed_last:
+                if is_in_button(mx, my, exit_btn):
+                    print("[ball] Exit @", mx, my)
+                    app.set_exit_flag(True)
+                elif is_in_button(mx, my, set_btn):
+                    set_mode = not set_mode
+                    dragging_sp = False
+                    print("[ball] Set mode ->", set_mode)
+                elif is_in_button(mx, my, reset_btn):
+                    sp_mm = 0
+                    sp_pending = True
+                    set_mode = False
+                    dragging_sp = False
+                    if serial_dev is not None:
+                        uart_write(serial_dev, pack_setpoint_frame(0))
+                        sp_pending = False
+                    print("[ball] Reset SP=0")
+                elif set_mode and hit_drag_zone(mx, my, roi, drag_strip):
+                    dragging_sp = True
+                    sp_mm = roi_x_to_mm(mx, roi)
+                    sp_pending = True
+                    if serial_dev is not None:
+                        if uart_write(serial_dev, pack_setpoint_frame(sp_mm)):
+                            sp_pending = False
+            elif pressed and set_mode and dragging_sp:
+                new_sp = roi_x_to_mm(mx, roi)
+                if new_sp != sp_mm:
+                    sp_mm = new_sp
+                    sp_pending = True
+                    if serial_dev is not None:
             fps = time.fps()
-            exit_btn, mode_btn, roi_btn = draw_overlay(
-                img, roi, det, pos_filt if has_filt else 0.0, mode, fps, serial_dev is not None
+            draw_ui(
+                img, roi, det, pos_mm_i, sp_mm, usable,
+                exit_btn, set_btn, reset_btn, drag_strip,
+                set_mode, dragging_sp, fps,
             )
             disp.show(img)
 
-            tx, ty, pressed = ts.read()
-            if pressed and not pressed_last:
-                if is_in_button(tx, ty, exit_btn):
-                    app.set_exit_flag(True)
-                elif is_in_button(tx, ty, mode_btn):
-                    mode = (mode + 1) % 3
-                    print("[ball] mode", MODE_NAMES[mode])
-                elif is_in_button(tx, ty, roi_btn):
-                    roi_nudge = (roi_nudge + 1) % 3
-                    if roi_nudge == 0:
-                        roi[1] = ROI_Y
-                    elif roi_nudge == 1:
-                        roi[1] = max(0, ROI_Y - 25)
-                    else:
-                        roi[1] = min(CAM_H - roi[3], ROI_Y + 25)
-                    print("[ball] ROI y", roi[1])
-            pressed_last = pressed
-
             now_ms = time.ticks_ms()
             if serial_dev is not None and (now_ms - last_tx_ms) >= TX_MIN_MS:
-                found = det["found"]
+                if sp_pending:
+                    if uart_write(serial_dev, pack_setpoint_frame(sp_mm)):
+                        sp_pending = False
                 frame = pack_ball_frame(
-                    found,
-                    pos_tx if found else 0.0,
-                    det["cx"] if found else 0,
-                    det["cy"] if found else 0,
-                    det["conf"] if found else 0,
+                    usable,
+                    pos_mm_i,
+                    det["cx"] if usable else 0,
+                    det["cy"] if usable else 0,
+                    det["conf"] if det["found"] else 0,
                     mode,
                 )
-                serial_dev.write(frame)
+                uart_write(serial_dev, frame)
                 last_tx_ms = now_ms
 
-            frame_i += 1
-            if frame_i % 30 == 0:
+            if (now_ms - last_log_ms) >= 1000:
+                last_log_ms = now_ms
                 print(
-                    f"[ball] f={frame_i} found={det['found']} "
-                    f"pos={pos_filt:+.1f} conf={det['conf']} via={det['via']} fps={fps:.1f}"
+                    f"[ball] pos={pos_mm_i:+d} sp={sp_mm:+d} set={int(set_mode)} "
+                    f"fps={fps:.1
+                uart_write(serial_dev, frame)
+                last_tx_ms = now_ms
+
+            if (now_ms - last_log_ms) >= 1000:
+                last_log_ms = now_ms
+                print(
+                    f"[ball] pos={pos_mm_i:+d} sp={sp_mm:+d} set={int(set_mode)} "
+                    f"fps~{time.fps():.0f}"
                 )
         except Exception as e:
             err_cnt += 1
             print("[ball] loop err:", e)
-            show_boot(disp, f"ERR: {e}")
-            time.sleep_ms(500)
-            if err_cnt > 20:
+            time.sleep_ms(200)
+            if err_cnt > 30:
                 break
 
     if serial_dev is not None:
-        try:
-            serial_dev.write(pack_ball_frame(False, 0.0, 0, 0, 0, mode))
-        except Exception:
-            pass
+        uart_write(serial_dev, pack_ball_frame(False, 0, 0, 0, 0, mode))
     print("[ball] exit")
 
 

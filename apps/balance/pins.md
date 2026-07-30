@@ -18,32 +18,50 @@
 
 硬件固定：MS1/MS2=GND · VM=+12V · VIO=3V3 · TMC_B 未用。
 
-## 2. 机械默认（stepper_cfg.h）
+## 2. 电机 / 机械（42×23 + M5）
 
 | 参数 | 值 |
 |------|-----|
+| 电机 | 42×23 · 1.8° · **1.2 A 额定** · 4.2 Ω · 4.0 mH · 0.16 N·m |
+| 建议 IRUN | **0.7–0.9 A**（轻载，降发热；电位器/VREF 硬件调） |
+| 建议 IHOLD | **0.25–0.4 A**；软件到位/丢球会 **关 EN** |
 | 导程 | **0.8 mm/圈**（M5 实测） |
-| 微步 | 1/8 × 200 = 1600 step/rev |
-| 分辨率 | **2000 step/mm** |
+| 微步 | 1/8 × 200 = 1600 step/rev → **2000 step/mm** |
 
 ## 3. 软件
 
 | 文件 | 说明 |
 |------|------|
-| `src/Hardware/Inc/stepper_cfg.h` | 导程/微步/速度/软限位 |
-| `src/Hardware/Inc/stepper.h` | 驱动 API |
-| `src/Hardware/Src/stepper.c` | 开环位置 + 梯形加减速 |
-| `src/main.c` | 仅 `SYSCFG_DL_init` + `Stepper_Init` |
+| `stepper_*` | 丝杆开环位置 + 梯形加减速 |
+| `vision_uart.*` | UART 收 0x02/0x12 |
+| `ball_ctrl_*` | PD 闭环任意定点停球 |
+| `main.c` | SysTick + Poll + Update |
 
 ```c
-Stepper_Init();
-Stepper_SetEnable(true);
-Stepper_SetSpeedSps(4000);
-Stepper_SetTargetMm_x100(200); /* +2.00 mm */
-while (Stepper_IsBusy()) { }
+BallCtrl_Init();
+BallCtrl_SetTargetMm_x100(0);   /* 停在 O；改此即任意定点 */
+BallCtrl_Enable(true);
+/* 主循环：VisionUart_Poll(); BallCtrl_Update(); */
 ```
 
-## 4. 预留（业务侧自行配置）
+## 4. 视觉球位 UART（协议已定，外设待开）
 
-- 板载 UART0 排针 PA28/PA31、按键 PB8、LED PB9、TMC 共 UART PA8/9
-- 当前 **SysConfig 未启用** 上述外设，避免与纯驱动耦合。
+| 项 | 约定 |
+|----|------|
+| 协议 | type=`0x02` 定长 13 B · 见 [docs/vision_proto.md](docs/vision_proto.md) |
+| 头文件 | `src/Hardware/Inc/ball_proto.h` |
+| 波特率 | 115200 8N1 |
+| 接线 | 视觉 TX → **PA31 (UART0 RX)** · 共地；可选 PA28 TX |
+| 发送端 | `apps/maixcam/opencv`（`pack_ball_frame`） |
+
+SysConfig 已启用 **VISION_UART = UART0**（PA28 TX / PA31 RX @ 115200）。
+
+| 软件 | 说明 |
+|------|------|
+| `vision_uart` | 收 type 0x02 球位 / 0x12 定点 |
+| `ball_ctrl` | PD 闭环，任意定点停球 |
+
+## 5. 其它预留
+
+- 按键 PB8、LED PB9、TMC 共 UART PA8/9
+- 未启用。

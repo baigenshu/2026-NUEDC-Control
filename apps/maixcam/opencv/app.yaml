@@ -1,10 +1,10 @@
 id: ball_opencv
 name: Ball OpenCV
 name[zh]: 钢珠OpenCV
-version: 1.0.0
+version: 1.1.0
 author: line_tracker_car
-desc: OpenCV groove ball detect + UART position
-desc[zh]: OpenCV 凹槽钢珠检测，串口发送位置
+desc: OpenCV ball pos UART type=0x02 + setpoint 0x12 for balance
+desc[zh]: 凹槽钢珠检测，串口对接 balance 闭环（0x02球位/0x12定点）
 exclude:
   - .vscode
   - dist

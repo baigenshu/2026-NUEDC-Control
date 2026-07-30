@@ -1,6 +1,7 @@
 /**
- * balance — TMC_A 步进驱动最小配置
+ * balance — TMC_A 步进 + 视觉 UART0 球位闭环
  * EN=PA14 DIR=PA13 STEP=PA12 · STEP_TIM=TIMG7 10us
+ * VISION_UART: PA28 TX / PA31 RX @ 115200
  * @cliArgs --device "MSPM0G350X" --part "Default" --package "LQFP-64(PM)" --product "mspm0_sdk@2.05.01.00"
  * @v2CliArgs --device "MSPM0G3507" --package "LQFP-64(PM)" --product "mspm0_sdk@2.05.01.00"
  * @versions {"tool":"1.24.1+4189"}
@@ -12,6 +13,8 @@ const SYSCTL  = scripting.addModule("/ti/driverlib/SYSCTL");
 const SYSTICK = scripting.addModule("/ti/driverlib/SYSTICK");
 const TIMER   = scripting.addModule("/ti/driverlib/TIMER", {}, false);
 const TIMER1  = TIMER.addInstance();
+const UART    = scripting.addModule("/ti/driverlib/UART", {}, false);
+const UART1   = UART.addInstance();
 
 const divider7       = system.clockTree["PLL_PDIV"];
 divider7.divideValue = 2;
@@ -48,6 +51,22 @@ TIMER1.timerMode          = "PERIODIC";
 TIMER1.timerPeriod        = "10 us";
 TIMER1.interrupts         = ["ZERO"];
 TIMER1.peripheral.$assign = "TIMG7";
+
+/* 视觉球位：MaixCAM TX → PA31 RX · 115200 · type=0x02 */
+UART1.$name                            = "VISION_UART";
+UART1.targetBaudRate                   = 115200;
+UART1.peripheral.$assign               = "UART0";
+UART1.peripheral.rxPin.$assign         = "PA31";
+UART1.peripheral.txPin.$assign         = "PA28";
+UART1.txPinConfig.direction            = scripting.forceWrite("OUTPUT");
+UART1.txPinConfig.hideOutputInversion  = scripting.forceWrite(false);
+UART1.txPinConfig.onlyInternalResistor = scripting.forceWrite(false);
+UART1.txPinConfig.passedPeripheralType = scripting.forceWrite("Digital");
+UART1.txPinConfig.$name                = "ti_driverlib_gpio_GPIOPinGeneric_vis_tx";
+UART1.rxPinConfig.hideOutputInversion  = scripting.forceWrite(false);
+UART1.rxPinConfig.onlyInternalResistor = scripting.forceWrite(false);
+UART1.rxPinConfig.passedPeripheralType = scripting.forceWrite("Digital");
+UART1.rxPinConfig.$name                = "ti_driverlib_gpio_GPIOPinGeneric_vis_rx";
 
 SYSCTL.clockTreeEn           = true;
 SYSCTL.forceDefaultClkConfig = true;
