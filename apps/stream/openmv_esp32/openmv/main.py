@@ -1,5 +1,5 @@
-# OpenMV H7 → ESP32 UART JPEG stream
-# Wire: P4(TX)->ESP GPIO16(RX), P5(RX)<-ESP GPIO17(TX), GND-GND
+﻿# OpenMV H7 → ESP32 UART JPEG stream (QVGA, stable)
+# Wire: P4(TX)->ESP GPIO16(RX), P5(RX)<-ESP GPIO17(TX optional), GND-GND
 # Protocol: 0xAA 0x55 | len_le32 | jpeg_bytes
 
 import sensor
@@ -7,16 +7,16 @@ import time
 from pyb import UART
 
 UART_ID = 3
-BAUD = 921600
+BAUD = 460800
 JPEG_QUALITY = 35
-FRAME_MS = 80
-MAX_JPEG = 16 * 1024
+FRAME_MS = 30
+MAX_JPEG = 24 * 1024
+LOG_EVERY = 10
 
 MAGIC = b"\xaa\x55"
 
 
 def jpeg_bytes(img):
-    # Prefer in-place compress; fall back to compressed() copy.
     try:
         img.compress(quality=JPEG_QUALITY)
         try:
@@ -40,20 +40,25 @@ def send_frame(uart, raw):
     n = len(raw)
     if n < 1 or n > MAX_JPEG:
         return False
+    if n < 2 or raw[0] != 0xFF or raw[1] != 0xD8:
+        print("not jpeg soi")
+        return False
     uart.write(MAGIC)
     uart.write(n.to_bytes(4, "little"))
-    # chunk large writes for older firmwares
     mv = memoryview(raw)
     off = 0
     while off < n:
-        off += uart.write(mv[off : off + 512])
-    return True
+        wrote = uart.write(mv[off : off + 1024])
+        if not wrote:
+            break
+        off += wrote
+    return off == n
 
 
 def main():
     sensor.reset()
     sensor.set_pixformat(sensor.RGB565)
-    sensor.set_framesize(sensor.QQVGA)
+    sensor.set_framesize(sensor.QVGA)
     sensor.skip_frames(time=2000)
 
     uart = UART(UART_ID, BAUD)
@@ -62,8 +67,18 @@ def main():
     except TypeError:
         pass
 
+    try:
+        while uart.any():
+            uart.read(64)
+    except Exception:
+        pass
+
     clock = time.clock()
-    print("openmv uart stream ready baud=%d" % BAUD)
+    n = 0
+    print(
+        "openmv QVGA q=%d baud=%d frame_ms=%d max_jpg=%d"
+        % (JPEG_QUALITY, BAUD, FRAME_MS, MAX_JPEG)
+    )
 
     while True:
         clock.tick()
@@ -73,7 +88,9 @@ def main():
             time.sleep_ms(FRAME_MS)
             continue
         ok = send_frame(uart, raw)
-        print("fps=%.1f jpg=%d ok=%s" % (clock.fps(), len(raw), ok))
+        n += 1
+        if n % LOG_EVERY == 0:
+            print("fps=%.1f jpg=%d ok=%s" % (clock.fps(), len(raw), ok))
         time.sleep_ms(FRAME_MS)
 
 

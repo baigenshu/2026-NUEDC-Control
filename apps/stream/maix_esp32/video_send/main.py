@@ -1,11 +1,11 @@
 """
-video_send — MaixCAM-Pro 直播推流
+video_send — MaixCAM-Pro 钢珠检测直播
 
 固定连接 ESP32 SoftAP：MaixCam-ESP
-  - 默认 / 主路径：Phone Web — 全力直播（较高画质），录像仅在手机浏览器
-  - TFT 模式入口保留但标注弃用（ESP 端屏方案已停用）
+  - Phone Web：YOLOv8 钢珠检测叠框 → 网页直播；录像仅在手机
+  - TFT 入口保留但弃用（ESP 屏方案已停）
 
-ESP video_receive 当前仅作热点，不拉流、不上屏。
+模型：steel_ball.mud（+ cvimodel），见 detect_util.find_model()
 """
 
 from maix import camera, display, image, app, time, http, network, err, touchscreen
@@ -267,13 +267,33 @@ def run_tft_stream(disp, ts, cfg, ip):
 
 def run_web_mode(disp, ts, cfg, ip):
     from web_server import run_web_server, HTTP_PORT
+    from detect_util import load_detector
     import threading
 
-    cam = camera.Camera(cfg["cam_w"], cfg["cam_h"])
+    show_message(disp, "Loading model...", "steel ball YOLO")
+    try:
+        detector, use_zh = load_detector()
+    except Exception as e:
+        show_message(disp, "Model failed", str(e)[:40])
+        print("load detector failed:", e)
+        time.sleep_ms(2500)
+        raise
+
+    # Camera must match detector input (boxes align)
+    cam_w = detector.input_width()
+    cam_h = detector.input_height()
+    cam_fmt = detector.input_format()
+    print("camera for detect:", cam_w, cam_h, cam_fmt)
+    cam = camera.Camera(cam_w, cam_h, cam_fmt)
+
+    # Keep stream encode settings from cfg; resolution follows model
+    stream_cfg = dict(cfg)
+    stream_cfg["cam_w"] = cam_w
+    stream_cfg["cam_h"] = cam_h
+
     page_url = "http://{}:{}".format(ip, HTTP_PORT)
-    print("mode: web live-only")
+    print("mode: web + steel ball detect")
     print("page:", page_url)
-    print("quality", cfg["cam_w"], "x", cfg["cam_h"], "q=", cfg["jpeg_quality"])
 
     ui_stop = {"v": False}
 
@@ -284,14 +304,14 @@ def run_web_mode(disp, ts, cfg, ip):
             try:
                 canvas = image.Image(dw, dh)
                 canvas.draw_rect(0, 0, dw, dh, color=image.Color.from_rgb(10, 14, 20), thickness=-1)
-                canvas.draw_string(8, 12, "LIVE Web", color=image.COLOR_GREEN, scale=1.2)
+                canvas.draw_string(8, 12, "DETECT+LIVE", color=image.COLOR_GREEN, scale=1.2)
                 canvas.draw_string(8, 40, ip, color=image.COLOR_WHITE, scale=1.0)
                 canvas.draw_string(
-                    8, 64, ":{}  {}x{}".format(HTTP_PORT, cfg["cam_w"], cfg["cam_h"]),
+                    8, 64, ":{}  {}x{}".format(HTTP_PORT, cam_w, cam_h),
                     color=image.Color.from_rgb(120, 200, 255), scale=0.9,
                 )
                 canvas.draw_string(
-                    8, 90, "rec on phone only", color=image.Color.from_rgb(160, 170, 180), scale=0.8
+                    8, 90, "ball boxes on web", color=image.Color.from_rgb(160, 170, 180), scale=0.8
                 )
                 exit_btn = [dw - 100, dh - 50, 90, 40]
                 draw_exit_btn(canvas, exit_btn)
@@ -310,7 +330,9 @@ def run_web_mode(disp, ts, cfg, ip):
     th = threading.Thread(target=ui_loop, name="web-ui", daemon=True)
     th.start()
     try:
-        run_web_server(cam, cfg, ip, port=HTTP_PORT)
+        run_web_server(
+            cam, stream_cfg, ip, port=HTTP_PORT, detector=detector, use_zh=use_zh
+        )
     finally:
         ui_stop["v"] = True
 
