@@ -1,6 +1,6 @@
 /**
  * @file ball_ctrl_cfg.h
- * @brief cascade: pos PI -> v_des; vel PD -> rod
+ * @brief 单环位置式 PID：球位误差 -> 丝杆倾角指令
  */
 #ifndef BALL_CTRL_CFG_H
 #define BALL_CTRL_CFG_H
@@ -12,13 +12,10 @@
 #define BALL_CTRL_DEFAULT_TARGET_MM_X100  (0)
 #endif
 #ifndef BALL_CTRL_KP_POS
-#define BALL_CTRL_KP_POS            (1.0f)
+#define BALL_CTRL_KP_POS            (0.045f)  /* rod mm / ball mm */
 #endif
 #ifndef BALL_CTRL_KI_POS
-#define BALL_CTRL_KI_POS            (0.10f)
-#endif
-#ifndef BALL_CTRL_V_DES_MAX
-#define BALL_CTRL_V_DES_MAX         (35.0f)
+#define BALL_CTRL_KI_POS            (0.004f)
 #endif
 #ifndef BALL_CTRL_I_SEP_MM
 #define BALL_CTRL_I_SEP_MM          (25.0f)
@@ -26,14 +23,8 @@
 #ifndef BALL_CTRL_I_LIM
 #define BALL_CTRL_I_LIM             (40.0f)
 #endif
-#ifndef BALL_CTRL_KP_VEL
-#define BALL_CTRL_KP_VEL            (0.035f)
-#endif
-#ifndef BALL_CTRL_KD_VEL
-#define BALL_CTRL_KD_VEL            (0.025f)
-#endif
-#ifndef BALL_CTRL_KFF_VEL
-#define BALL_CTRL_KFF_VEL           (0.008f)
+#ifndef BALL_CTRL_KD_POS
+#define BALL_CTRL_KD_POS            (0.045f)  /* rod mm / (ball mm/s) */
 #endif
 #ifndef BALL_CTRL_DEAD_MM_X100
 #define BALL_CTRL_DEAD_MM_X100      (100)

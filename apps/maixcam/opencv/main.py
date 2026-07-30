@@ -131,7 +131,7 @@ def setup_uart_safe():
         ser = uart.UART(device, BAUD)
         # 文本握手：MCU 状态机忽略非 AA 55
         ser.write_str("BALL ready\r\n")
-        print("[ball] UART open", device, BAUD, "→ balance PA31 RX")
+        print("[ball] UART open", device, BAUD, "-> balance PA31 RX")
         return ser
     except Exception as e:
         print("[ball] UART fail (continue without):", e)
@@ -640,6 +640,14 @@ def main():
                     sp_mm = new_sp
                     sp_pending = True
                     if serial_dev is not None:
+                        if uart_write(serial_dev, pack_setpoint_frame(sp_mm)):
+                            sp_pending = False
+            else:
+                if dragging_sp:
+                    sp_pending = True
+                dragging_sp = False
+            pressed_last = pressed
+
             fps = time.fps()
             draw_ui(
                 img, roi, det, pos_mm_i, sp_mm, usable,
@@ -667,16 +675,8 @@ def main():
             if (now_ms - last_log_ms) >= 1000:
                 last_log_ms = now_ms
                 print(
-                    f"[ball] pos={pos_mm_i:+d} sp={sp_mm:+d} set={int(set_mode)} "
-                    f"fps={fps:.1
-                uart_write(serial_dev, frame)
-                last_tx_ms = now_ms
-
-            if (now_ms - last_log_ms) >= 1000:
-                last_log_ms = now_ms
-                print(
-                    f"[ball] pos={pos_mm_i:+d} sp={sp_mm:+d} set={int(set_mode)} "
-                    f"fps~{time.fps():.0f}"
+                    "[ball] pos=%+d sp=%+d set=%d fps=%.1f"
+                    % (pos_mm_i, sp_mm, int(set_mode), fps)
                 )
         except Exception as e:
             err_cnt += 1

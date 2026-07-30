@@ -1,6 +1,6 @@
 /**
  * @file ball_ctrl.h
- * @brief 视觉球位级联闭环：位置 PI → 速度 PD+FF → 丝杆倾角
+ * @brief 视觉球位单环位置 PID → 丝杆倾角
  */
 #ifndef BALL_CTRL_H
 #define BALL_CTRL_H

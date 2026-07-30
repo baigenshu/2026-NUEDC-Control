@@ -1,16 +1,12 @@
 /**
  * @file ball_ctrl.c
- * @brief Cascade ball-beam: pos PI -> v_des; vel PD+FF -> rod
+ * @brief Ball position PID -> leadscrew rod command
  */
 #include "ball_ctrl.h"
 #include "ball_ctrl_cfg.h"
 #include "ball_proto.h"
 #include "vision_uart.h"
 #include "stepper.h"
-
-#ifndef BALL_CTRL_LINK_TIMEOUT_MS
-#define BALL_CTRL_LINK_TIMEOUT_MS   (150u)
-#endif
 
 static bool              s_en;
 static ball_ctrl_state_t s_state;
@@ -21,7 +17,6 @@ static float             s_ball_f;
 static float             s_vel_mm_s;
 static float             s_rod_f;
 static float             s_i_pos;
-static float             s_v_des;
 static bool              s_have_ball;
 static uint32_t          s_ms_accum;
 static uint32_t          s_last_frame_ms;
@@ -63,7 +58,6 @@ static void coils_off(void)
 static void reset_integrators(void)
 {
     s_i_pos = 0.0f;
-    s_v_des = 0.0f;
 }
 
 void BallCtrl_Init(void)
@@ -201,8 +195,6 @@ static void control_step(float dt_s)
 {
     float e_mm;
     float abs_e;
-    float v_des;
-    float ev;
     float rod_mm;
     float rod_unsat;
     float out_a = BALL_CTRL_OUT_ALPHA;
@@ -242,7 +234,7 @@ static void control_step(float dt_s)
     s_settle_ms = 0;
     coils_on();
 
-    /* ===== outer: position PI -> v_des ===== */
+    /* Position-form PID; derivative is taken on measured ball velocity. */
     if (abs_e < BALL_CTRL_I_SEP_MM)
         s_i_pos += e_mm * dt_s;
     else
@@ -250,27 +242,20 @@ static void control_step(float dt_s)
 
     s_i_pos = clampf(s_i_pos, -BALL_CTRL_I_LIM, BALL_CTRL_I_LIM);
 
-    v_des = BALL_CTRL_KP_POS * e_mm + BALL_CTRL_KI_POS * s_i_pos;
-    v_des = clampf(v_des, -BALL_CTRL_V_DES_MAX, BALL_CTRL_V_DES_MAX);
-    s_v_des = v_des;
-
-    /* ===== inner: velocity PD + FF -> rod ===== */
-    ev = v_des - s_vel_mm_s;
     rod_unsat =
         BALL_CTRL_SIGN * (
-            BALL_CTRL_KP_VEL * ev
-          + BALL_CTRL_KFF_VEL * v_des
-          + BALL_CTRL_KD_VEL * (-s_vel_mm_s)
+                        BALL_CTRL_KP_POS * e_mm
+                    + BALL_CTRL_KI_POS * s_i_pos
+                    - BALL_CTRL_KD_POS * s_vel_mm_s
         );
 
     rod_mm = clampf(rod_unsat, -rod_max, rod_max);
 
-    /* anti-windup: if rod saturated and I pushing further, freeze I */
-    if ((rod_mm >= rod_max - 1e-3f && e_mm > 0.0f) ||
-        (rod_mm <= -rod_max + 1e-3f && e_mm < 0.0f)) {
-        /* freeze: undo last integrate roughly */
+    /* Anti-windup: undo the latest integral update while the output saturates. */
+    if ((rod_mm >= rod_max - 1e-3f && rod_unsat > rod_max) ||
+        (rod_mm <= -rod_max + 1e-3f && rod_unsat < -rod_max)) {
         if (abs_e < BALL_CTRL_I_SEP_MM)
-            s_i_pos -= e_mm * dt_s * 0.5f;
+            s_i_pos -= e_mm * dt_s;
     }
 
     s_rod_f = s_rod_f + out_a * (rod_mm - s_rod_f);
