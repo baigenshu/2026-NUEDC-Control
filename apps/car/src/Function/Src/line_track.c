@@ -1,49 +1,95 @@
 /**
  * @file line_track.c
- * @brief 灰度巡线 PID → Chassis Arcade（owner=LINE）
+ * @brief 8 路灰度 PD 巡线
+ *
+ * 规则：
+ * 1. 加权位置 → 低通 → 死区 → PD 转向
+ * 2. |turn| ≤ 0.7 * base，慢侧不反转
+ * 3. 丢线保持上次转向继续前进
  */
 #include "line_track.h"
 #include "chassis_cfg.h"
 #include "chassis.h"
 #include "gray.h"
 
-/* chassis.c 内部导出：带 owner 的 Arcade */
-void Chassis_ArcadeFromLine(int16_t throttle, int16_t turn);
-
 static bool    s_enabled;
 static int16_t s_base_speed;
 static int32_t s_error;
 static uint8_t s_mask;
 static int32_t s_prev_err;
-static float   s_integral;
+static float   s_filt_err;
 static uint8_t s_lost_count;
-static uint8_t s_searching;
-static uint32_t s_search_ms;
 static int16_t s_last_turn;
+
+static int16_t clamp_i16(int16_t v, int16_t lo, int16_t hi)
+{
+    if (v < lo)
+        return lo;
+    if (v > hi)
+        return hi;
+    return v;
+}
+
+static int16_t abs_i16(int16_t v)
+{
+    return (v < 0) ? (int16_t)(-v) : v;
+}
+
+/** 转向上限：不超过 LT_TURN_LIMIT，也不超过 0.7*base（防反转） */
+static int16_t turn_limit(void)
+{
+    int16_t lim = (int16_t)LT_TURN_LIMIT;
+    int16_t by_speed = (int16_t)((abs_i16(s_base_speed) * 7) / 10);
+
+    if (by_speed < 4)
+        by_speed = 4;
+    if (lim > by_speed)
+        lim = by_speed;
+    return lim;
+}
+
+static int16_t clamp_turn(int16_t t)
+{
+    int16_t lim = turn_limit();
+    return clamp_i16(t, (int16_t)(-lim), lim);
+}
+
+static int16_t slew_turn(int16_t target)
+{
+    int16_t d = (int16_t)(target - s_last_turn);
+    int16_t step = (int16_t)LT_TURN_SLEW;
+
+    if (step < 1)
+        step = 1;
+    if (d > step)
+        d = step;
+    else if (d < -step)
+        d = (int16_t)(-step);
+    return (int16_t)(s_last_turn + d);
+}
 
 void LineTrack_Init(void)
 {
     Gray_Init();
-    s_enabled    = false;
+    s_enabled = false;
     s_base_speed = (int16_t)LT_BASE_SPEED_DEFAULT;
-    s_error      = 0;
-    s_mask       = 0;
-    s_prev_err   = 0;
-    s_integral   = 0.f;
+    LineTrack_Reset();
+}
+
+void LineTrack_Reset(void)
+{
+    s_error = 0;
+    s_mask = 0;
+    s_prev_err = 0;
+    s_filt_err = 0.f;
     s_lost_count = 0;
-    s_searching  = 0;
-    s_search_ms  = 0;
-    s_last_turn  = 0;
+    s_last_turn = 0;
 }
 
 void LineTrack_SetEnable(bool on)
 {
     s_enabled = on;
-    if (!on) {
-        s_lost_count = 0;
-        s_searching  = 0;
-        s_integral   = 0.f;
-    }
+    LineTrack_Reset();
 }
 
 bool LineTrack_IsEnabled(void)
@@ -53,85 +99,75 @@ bool LineTrack_IsEnabled(void)
 
 void LineTrack_SetBaseSpeed(int16_t pct)
 {
-    if (pct > 100)  pct = 100;
-    if (pct < -100) pct = -100;
+    if (pct > 100)
+        pct = 100;
+    if (pct < 0)
+        pct = 0;
     s_base_speed = pct;
 }
 
-int32_t LineTrack_GetError(void) { return s_error; }
-uint8_t LineTrack_GetMask(void)  { return s_mask; }
-
-static int16_t clamp_turn(int16_t t)
+int32_t LineTrack_GetError(void)
 {
-    if (t >  (int16_t)LT_TURN_LIMIT) return (int16_t)LT_TURN_LIMIT;
-    if (t < -(int16_t)LT_TURN_LIMIT) return (int16_t)(-LT_TURN_LIMIT);
-    return t;
+    return s_error;
+}
+
+uint8_t LineTrack_GetMask(void)
+{
+    return s_mask;
 }
 
 void LineTrack_Update(void)
 {
-    int16_t turn;
+    float raw;
+    float alpha;
     float deriv;
+    int32_t err;
+    int16_t turn;
+    int16_t throttle;
 
     if (!s_enabled)
         return;
-    /* 与 MOTION 互斥：Busy 时 main 不应调用；双保险 */
-    if (Chassis_Busy())
-        return;
 
-    s_mask  = Gray_ReadMask();
-    s_error = Gray_GetPosition();
+    s_mask = Gray_ReadMask();
+    raw = (float)Gray_GetPosition();
 
+    alpha = LT_ERROR_FILTER;
+    if (alpha < 0.05f)
+        alpha = 0.05f;
+    if (alpha > 1.0f)
+        alpha = 1.0f;
+    s_filt_err += alpha * (raw - s_filt_err);
+    err = (int32_t)(s_filt_err + (s_filt_err >= 0.f ? 0.5f : -0.5f));
+
+    if (err > -(int32_t)LT_ERROR_DEADZONE && err < (int32_t)LT_ERROR_DEADZONE)
+        err = 0;
+    s_error = err;
+
+    /* 丢线：保持上次转向继续前进 */
     if (s_mask == 0u) {
-        s_lost_count++;
-        if (s_lost_count < (uint8_t)LT_LOST_DEBOUNCE) {
-            /* 去抖期内保持上次转向 */
-            Chassis_ArcadeFromLine(s_base_speed, s_last_turn);
-            return;
-        }
-
-        /* 触发丢线策略 */
-        switch (LT_LOST_LINE_POLICY) {
-        case 1: /* HOLD last turn */
-            Chassis_ArcadeFromLine(s_base_speed, s_last_turn);
-            break;
-        case 2: /* SEARCH */
-            if (!s_searching) {
-                s_searching = 1;
-                s_search_ms = 0;
-            }
-            s_search_ms += 10u; /* 假定 10ms 节拍；更精确可由外部传 dt */
-            if (s_search_ms >= (uint32_t)LT_SEARCH_TIMEOUT_MS) {
-                Chassis_Stop(CHASSIS_STOP_DEFAULT);
-                s_searching = 0;
-                s_enabled   = false;
-            } else {
-                turn = (s_last_turn >= 0) ? (int16_t)LT_SEARCH_TURN
-                                          : (int16_t)(-LT_SEARCH_TURN);
-                Chassis_ArcadeFromLine(0, turn);
-            }
-            break;
-        default: /* 0 = STOP */
-            Chassis_Stop(CHASSIS_STOP_DEFAULT);
-            s_enabled = false;
-            break;
-        }
+        if (s_lost_count < 255u)
+            s_lost_count++;
+        Chassis_Arcade(s_base_speed, s_last_turn);
         return;
     }
-
-    /* 有线：退出搜索 / 清丢线计数 */
     s_lost_count = 0;
-    s_searching  = 0;
-    s_search_ms  = 0;
 
-    /* PID */
-    s_integral += (float)s_error * LT_KI;
     deriv = (float)(s_error - s_prev_err);
     s_prev_err = s_error;
 
-    turn = (int16_t)(LT_KP * (float)s_error + s_integral + LT_KD * deriv);
+    turn = (int16_t)((float)LT_TURN_SIGN *
+                     (LT_KP * (float)s_error + LT_KD * deriv));
     turn = clamp_turn(turn);
+    turn = slew_turn(turn);
     s_last_turn = turn;
 
-    Chassis_ArcadeFromLine(s_base_speed, turn);
+    /* 大偏差稍降速，仍保持前进 */
+    throttle = s_base_speed;
+    if (err > 1600 || err < -1600) {
+        throttle = (int16_t)((s_base_speed * 8) / 10);
+        if (throttle < 10)
+            throttle = 10;
+    }
+
+    Chassis_Arcade(throttle, turn);
 }

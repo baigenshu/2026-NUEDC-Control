@@ -1,6 +1,5 @@
 /**
  * @file motor.c
- * @brief 四轮 TB6612 类 H 桥驱动
  */
 #include "motor.h"
 #include "chassis_cfg.h"
@@ -10,17 +9,13 @@ typedef struct {
     uint32_t in1_pin;
     uint32_t in2_pin;
     GPTIMER_Regs *pwm_inst;
-    DL_TIMER_CC_INDEX  pwm_idx;
+    DL_TIMER_CC_INDEX pwm_idx;
 } motor_hw_t;
 
 static const motor_hw_t s_hw[MOTOR_ID_COUNT] = {
-    /* A 右后: PWMA C0 PA12 */
     { GPIO_MOTOR_AIN1_PIN, GPIO_MOTOR_AIN2_PIN, PWMA_INST, GPIO_PWMA_C0_IDX },
-    /* B 右前: PWMB C0 PA21 */
     { GPIO_MOTOR_BIN1_PIN, GPIO_MOTOR_BIN2_PIN, PWMB_INST, GPIO_PWMB_C0_IDX },
-    /* C 左前: PWMA C1 PA13 */
     { GPIO_MOTOR_CIN1_PIN, GPIO_MOTOR_CIN2_PIN, PWMA_INST, GPIO_PWMA_C1_IDX },
-    /* D 左后: PWMB C1 PA22 */
     { GPIO_MOTOR_DIN1_PIN, GPIO_MOTOR_DIN2_PIN, PWMB_INST, GPIO_PWMB_C1_IDX },
 };
 
@@ -35,9 +30,41 @@ static uint16_t clamp_duty(int16_t abs_duty)
     return (uint16_t)abs_duty;
 }
 
+static void ensure_pwm(void)
+{
+    /* CCP0+CCP1 均作输出（C/D 用 CCP1） */
+    DL_TimerG_setCaptureCompareCtl(PWMA_INST, DL_TIMER_CC_MODE_COMPARE, 0,
+                                   DL_TIMER_CC_0_INDEX);
+    DL_TimerG_setCaptureCompareCtl(PWMA_INST, DL_TIMER_CC_MODE_COMPARE, 0,
+                                   DL_TIMER_CC_1_INDEX);
+    DL_TimerG_setCaptureCompareCtl(PWMB_INST, DL_TIMER_CC_MODE_COMPARE, 0,
+                                   DL_TIMER_CC_0_INDEX);
+    DL_TimerG_setCaptureCompareCtl(PWMB_INST, DL_TIMER_CC_MODE_COMPARE, 0,
+                                   DL_TIMER_CC_1_INDEX);
+
+    DL_TimerG_setCaptureCompareAction(
+        PWMA_INST, (DL_TIMER_CC_ZACT_CCP_HIGH | DL_TIMER_CC_CUACT_CCP_LOW),
+        DL_TIMER_CC_0_INDEX);
+    DL_TimerG_setCaptureCompareAction(
+        PWMA_INST, (DL_TIMER_CC_ZACT_CCP_HIGH | DL_TIMER_CC_CUACT_CCP_LOW),
+        DL_TIMER_CC_1_INDEX);
+    DL_TimerG_setCaptureCompareAction(
+        PWMB_INST, (DL_TIMER_CC_ZACT_CCP_HIGH | DL_TIMER_CC_CUACT_CCP_LOW),
+        DL_TIMER_CC_0_INDEX);
+    DL_TimerG_setCaptureCompareAction(
+        PWMB_INST, (DL_TIMER_CC_ZACT_CCP_HIGH | DL_TIMER_CC_CUACT_CCP_LOW),
+        DL_TIMER_CC_1_INDEX);
+
+    DL_TimerG_setCCPDirection(PWMA_INST, DL_TIMER_CC0_OUTPUT | DL_TIMER_CC1_OUTPUT);
+    DL_TimerG_setCCPDirection(PWMB_INST, DL_TIMER_CC0_OUTPUT | DL_TIMER_CC1_OUTPUT);
+    DL_TimerG_enableClock(PWMA_INST);
+    DL_TimerG_enableClock(PWMB_INST);
+    DL_TimerG_startCounter(PWMA_INST);
+    DL_TimerG_startCounter(PWMB_INST);
+}
+
 static void set_dir_pwm(const motor_hw_t *hw, int dir, uint16_t duty)
 {
-    /* dir: +1 正转 IN1=0 IN2=1；-1 反转 IN1=1 IN2=0；0 滑行/刹 */
     if (dir > 0) {
         DL_GPIO_clearPins(GPIO_MOTOR_PORT, hw->in1_pin);
         DL_GPIO_setPins(GPIO_MOTOR_PORT, hw->in2_pin);
@@ -47,11 +74,12 @@ static void set_dir_pwm(const motor_hw_t *hw, int dir, uint16_t duty)
     } else {
         DL_GPIO_clearPins(GPIO_MOTOR_PORT, hw->in1_pin | hw->in2_pin);
     }
-    DL_TimerG_setCaptureCompareValue(hw->pwm_inst, duty, hw->pwm_idx);
+    DL_TimerG_setCaptureCompareValue(hw->pwm_inst, (uint32_t)duty, hw->pwm_idx);
 }
 
 void Motor_Init(void)
 {
+    ensure_pwm();
     Motor_StopAll(MOTOR_STOP_COAST);
     Motor_SetEnable(false);
 }
@@ -72,12 +100,10 @@ void Motor_Set(motor_id_t id, int16_t duty)
     if ((unsigned)id >= MOTOR_ID_COUNT)
         return;
     hw = &s_hw[id];
-
     if (duty == 0) {
         set_dir_pwm(hw, 0, 0);
         return;
     }
-
     d = clamp_duty(duty);
     set_dir_pwm(hw, (duty > 0) ? +1 : -1, d);
 }
@@ -89,10 +115,9 @@ void Motor_StopAll(motor_stop_mode_t mode)
     for (i = MOTOR_ID_A; i < MOTOR_ID_COUNT; ++i) {
         const motor_hw_t *hw = &s_hw[i];
         DL_TimerG_setCaptureCompareValue(hw->pwm_inst, 0, hw->pwm_idx);
-        if (mode == MOTOR_STOP_BRAKE) {
+        if (mode == MOTOR_STOP_BRAKE)
             DL_GPIO_setPins(GPIO_MOTOR_PORT, hw->in1_pin | hw->in2_pin);
-        } else {
+        else
             DL_GPIO_clearPins(GPIO_MOTOR_PORT, hw->in1_pin | hw->in2_pin);
-        }
     }
 }
