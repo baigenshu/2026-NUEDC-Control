@@ -1,5 +1,6 @@
 """
 MaixCAM：OpenCV 钢珠位置 → UART → balance 摆杆主控（闭环停球）
+         + 本机屏 HUD + 手机 MJPEG 双显
 
 对接文档：
   apps/balance/docs/vision_proto.md
@@ -14,6 +15,13 @@ MaixCAM：OpenCV 钢珠位置 → UART → balance 摆杆主控（闭环停球�
   定点 0x12: AA 55 | 12 | 00 | target_mm i16 | pad×6 | csum
   pos/target 单位 = **1 mm**（整毫米，抑抖）；csum=sum(body)&0xFF
 
+WiFi（每次启动必扫码，无硬编码 SSID/密码）：
+  标准二维码 WIFI:T:WPA;S:ssid;P:pass;; 或 ssid|password
+  连上后再开 MJPEG
+
+MJPEG（手机热点同网段）：
+  http://<MaixIP>:8000/stream  （/ 同流，带 HUD 叠加）
+
 接线 3.3V 共地：
   MaixCAM A16 TX → balance PA31 (UART0 RX)
   MaixCAM A17 RX → balance PA28 (可选)
@@ -21,7 +29,12 @@ MaixCAM：OpenCV 钢珠位置 → UART → balance 摆杆主控（闭环停球�
 """
 
 from maix import camera, display, image, app, time, touchscreen, sys, err
+import re
+import socket
 import struct
+import threading
+import time as pytime
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 print("[ball] boot...")
 
@@ -54,6 +67,20 @@ BAUD = 115200
 
 CAM_W, CAM_H = 320, 240
 
+# ---------- WiFi 扫码（无硬编码 SSID/密码）----------
+WIFI_CONNECT_TIMEOUT = 60
+
+# ---------- MJPEG 推流（本机屏 + 手机双显）----------
+ENABLE_MJPEG = True
+HTTP_PORT = 8000
+JPEG_QUALITY = 45
+MJPEG_EVERY_N = 1         # 每 N 帧编码一次；2 可减负
+
+_mjpeg_lock = threading.Lock()
+_mjpeg_jpeg = None
+_mjpeg_stop = False
+_mjpeg_server = None
+
 # 凹槽 ROI：用户已标定＝完整有效行程（勿改四数）
 # 中线=O；品红线=停球定点；球=小点
 ROI_X, ROI_Y, ROI_W, ROI_H = 33, 128, 260, 14
@@ -80,6 +107,353 @@ Y_CENTER_WEIGHT = 20.0
 POS_HYST_MM = 0.55
 
 MODE_NAMES = ("BRI", "DRK", "AUT")
+
+
+def _wifi_unescape(s):
+    out = []
+    i = 0
+    while i < len(s):
+        if s[i] == "\\" and i + 1 < len(s):
+            out.append(s[i + 1])
+            i += 2
+            continue
+        out.append(s[i])
+        i += 1
+    return "".join(out)
+
+
+def parse_wifi_qr(payload):
+    """
+    解析 WiFi 二维码 → (ssid, password) 或 None。
+    支持：
+      WIFI:T:WPA;S:ssid;P:pass;;
+      WIFI:T:nopass;S:ssid;;
+      ssid|password
+      ssid\\npassword
+    """
+    if not payload:
+        return None
+    text = payload.strip()
+    if not text:
+        return None
+
+    upper = text.upper()
+    if upper.startswith("WIFI:"):
+        body = text[5:]
+        if body.endswith(";;"):
+            body = body[:-1]
+        fields = {}
+        parts = re.split(r"(?<!\\);", body)
+        for part in parts:
+            part = part.strip()
+            if not part or ":" not in part:
+                continue
+            key, val = part.split(":", 1)
+            key = key.strip().upper()
+            fields[key] = _wifi_unescape(val)
+        ssid = fields.get("S", "").strip()
+        if not ssid:
+            return None
+        t = fields.get("T", "WPA").strip().upper()
+        password = fields.get("P", "")
+        if t in ("NOPASS", "NONE", ""):
+            password = ""
+        return ssid, password
+
+    if "|" in text:
+        ssid, password = text.split("|", 1)
+        ssid = ssid.strip()
+        if ssid:
+            return ssid, password.strip()
+        return None
+
+    if "\n" in text:
+        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        if len(lines) >= 2:
+            return lines[0], lines[1]
+        if len(lines) == 1:
+            return lines[0], ""
+        return None
+
+    return None
+
+
+def wifi_connect(ssid, password):
+    """连热点；成功返回 ip 字符串，失败返回 None。"""
+    try:
+        from maix import network, err as maix_err
+    except Exception as e:
+        print("[ball] wifi module missing:", e)
+        return None
+    try:
+        w = network.wifi.Wifi()
+        try:
+            w.disconnect()
+        except Exception:
+            pass
+        print("[ball] wifi connect ssid=%r ..." % ssid)
+        e = w.connect(ssid, password or "", wait=True, timeout=int(WIFI_CONNECT_TIMEOUT))
+        ok = False
+        try:
+            ok = (e == maix_err.Err.ERR_NONE) or (e == 0) or (e is None)
+        except Exception:
+            ok = e in (0, None) or str(e) in ("0", "ERR_NONE", "None")
+        if not ok:
+            # 部分固件 connect 返回值不标准，再看 is_connected / IP
+            try:
+                ok = bool(w.is_connected())
+            except Exception:
+                ok = False
+        ip = ""
+        try:
+            ip = w.get_ip() or ""
+        except Exception:
+            ip = ""
+        if not ip or ip in ("0.0.0.0", "127.0.0.1"):
+            ip = get_ip()
+        if ip and ip not in ("0.0.0.0", "127.0.0.1"):
+            print("[ball] wifi ok ip=%s" % ip)
+            return ip
+        print("[ball] wifi connect fail ret=%r ip=%r" % (e, ip))
+        return None
+    except Exception as e:
+        print("[ball] wifi connect err:", e)
+        return None
+
+
+def phase_scan_wifi(disp, cam, ts):
+    """
+    每次启动必扫 WiFi 二维码并连接；成功返回 ip。
+    失败留在本阶段重试，直到成功或 app 退出。
+    """
+    print("[ball] phase: scan WiFi QR (no hardcoded SSID)")
+    status = "Scan WiFi QR"
+    status_col = image.COLOR_WHITE
+    last_fail_ms = 0
+    connecting = False
+
+    while not app.need_exit():
+        try:
+            img = cam.read()
+            iw, ih = img.width(), img.height()
+
+            if not connecting:
+                qrcodes = []
+                try:
+                    qrcodes = img.find_qrcodes()
+                except Exception as e:
+                    status = "QR err"
+                    status_col = image.COLOR_RED
+                    print("[ball] find_qrcodes:", e)
+
+                for qr in qrcodes:
+                    try:
+                        corners = qr.corners()
+                        for i in range(4):
+                            x0, y0 = corners[i][0], corners[i][1]
+                            x1, y1 = corners[(i + 1) % 4][0], corners[(i + 1) % 4][1]
+                            img.draw_line(x0, y0, x1, y1, image.COLOR_GREEN, 2)
+                    except Exception:
+                        pass
+                    try:
+                        payload = qr.payload()
+                    except Exception:
+                        payload = ""
+                    parsed = parse_wifi_qr(payload)
+                    if parsed is None:
+                        status = "Not WiFi QR"
+                        status_col = image.COLOR_ORANGE
+                        continue
+                    ssid, password = parsed
+                    status = "Connecting..."
+                    status_col = image.Color.from_rgb(120, 200, 255)
+                    img.draw_string(6, 4, "Scan WiFi QR", image.COLOR_WHITE, scale=1.1)
+                    img.draw_string(6, 28, status + " " + ssid[:18], status_col, scale=1.0)
+                    disp.show(img)
+                    connecting = True
+                    print("[ball] QR ssid=%r" % ssid)
+                    ip = wifi_connect(ssid, password)
+                    connecting = False
+                    if ip:
+                        status = "OK " + ip
+                        status_col = image.COLOR_GREEN
+                        img2 = cam.read()
+                        img2.draw_string(6, 4, "WiFi OK", image.COLOR_GREEN, scale=1.2)
+                        img2.draw_string(6, 30, ip, image.COLOR_WHITE, scale=1.1)
+                        img2.draw_string(6, 54, "ssid: " + ssid[:22], image.COLOR_WHITE, scale=1.0)
+                        disp.show(img2)
+                        time.sleep_ms(800)
+                        return ip
+                    status = "Fail, rescan"
+                    status_col = image.COLOR_RED
+                    last_fail_ms = time.ticks_ms()
+                    break
+
+            img.draw_string(6, 4, "Scan WiFi QR", image.COLOR_WHITE, scale=1.1)
+            img.draw_string(6, 28, status, status_col, scale=1.0)
+            img.draw_string(
+                6, ih - 22,
+                "WIFI:T:WPA;S:..;P:..;;",
+                image.Color.from_rgb(160, 160, 170),
+                scale=0.9,
+            )
+            # 取景辅助框
+            m = 28
+            img.draw_rect(m, m, max(8, iw - 2 * m), max(8, ih - 2 * m - 10),
+                          image.Color.from_rgb(80, 180, 255), 1)
+            disp.show(img)
+
+            if last_fail_ms and (time.ticks_ms() - last_fail_ms) > 2500:
+                if status.startswith("Fail"):
+                    status = "Scan WiFi QR"
+                    status_col = image.COLOR_WHITE
+                last_fail_ms = 0
+        except Exception as e:
+            print("[ball] wifi scan loop:", e)
+            time.sleep_ms(100)
+
+    return None
+
+
+def get_ip():
+    try:
+        import subprocess
+        out = subprocess.check_output(["ifconfig", "wlan0"], stderr=subprocess.DEVNULL)
+        text = out.decode(errors="ignore")
+        m = re.search(r"inet addr:(\d+\.\d+\.\d+\.\d+)", text)
+        if not m:
+            m = re.search(r"inet (\d+\.\d+\.\d+\.\d+)", text)
+        if m:
+            ip = m.group(1)
+            if ip not in ("0.0.0.0", "127.0.0.1"):
+                return ip
+    except Exception as e:
+        print("[ball] ifconfig skip:", e)
+    try:
+        from maix import network
+        ip = network.wifi.Wifi().get_ip()
+        if ip and ip not in ("0.0.0.0", "127.0.0.1", ""):
+            return ip
+    except Exception as e:
+        print("[ball] wifi get_ip skip:", e)
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        if ip and not ip.startswith("127."):
+            return ip
+    except Exception as e:
+        print("[ball] socket ip skip:", e)
+    return "0.0.0.0"
+
+
+def img_to_jpeg_bytes(img, quality):
+    try:
+        jpg = img.to_jpeg(quality=quality)
+    except TypeError:
+        try:
+            jpg = img.to_jpeg()
+        except Exception:
+            jpg = img.to_format(image.Format.FMT_JPEG)
+    if hasattr(jpg, "to_bytes"):
+        try:
+            return jpg.to_bytes()
+        except TypeError:
+            return jpg.to_bytes(True)
+    return bytes(jpg)
+
+
+def publish_mjpeg(img):
+    global _mjpeg_jpeg
+    if not ENABLE_MJPEG:
+        return
+    try:
+        raw = img_to_jpeg_bytes(img, JPEG_QUALITY)
+        with _mjpeg_lock:
+            _mjpeg_jpeg = raw
+    except Exception as e:
+        print("[ball] jpeg err:", e)
+
+
+class _MjpegHandler(BaseHTTPRequestHandler):
+    def log_message(self, fmt, *args):
+        return
+
+    def do_GET(self):
+        path = self.path.split("?")[0]
+        if path in ("/", "/stream"):
+            self.send_response(200)
+            self.send_header(
+                "Content-Type", "multipart/x-mixed-replace; boundary=frame"
+            )
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            try:
+                while not _mjpeg_stop and not app.need_exit():
+                    with _mjpeg_lock:
+                        frame = _mjpeg_jpeg
+                    if not frame:
+                        pytime.sleep(0.05)
+                        continue
+                    try:
+                        self.wfile.write(
+                            b"--frame\r\n"
+                            b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
+                        )
+                        self.wfile.flush()
+                    except (BrokenPipeError, ConnectionResetError, OSError):
+                        break
+                    pytime.sleep(0.03)
+            except Exception as e:
+                print("[ball] mjpeg client end:", e)
+            return
+        self.send_error(404)
+
+
+def start_mjpeg_server():
+    global _mjpeg_server, _mjpeg_stop
+    if not ENABLE_MJPEG:
+        return None
+    _mjpeg_stop = False
+    try:
+        server = ThreadingHTTPServer(("0.0.0.0", HTTP_PORT), _MjpegHandler)
+        server.timeout = 0.5
+        _mjpeg_server = server
+
+        def _serve():
+            while not _mjpeg_stop and not app.need_exit():
+                try:
+                    server.handle_request()
+                except Exception:
+                    break
+            try:
+                server.server_close()
+            except Exception:
+                pass
+
+        threading.Thread(target=_serve, name="mjpeg", daemon=True).start()
+        ip = get_ip()
+        url = "http://{}:{}/stream".format(ip, HTTP_PORT)
+        print("[ball] MJPEG:", url)
+        return url
+    except Exception as e:
+        print("[ball] MJPEG server fail:", e)
+        _mjpeg_server = None
+        return None
+
+
+def stop_mjpeg_server():
+    global _mjpeg_stop, _mjpeg_server
+    _mjpeg_stop = True
+    srv = _mjpeg_server
+    _mjpeg_server = None
+    if srv is not None:
+        try:
+            srv.server_close()
+        except Exception:
+            pass
 
 
 def setup_display():
@@ -559,6 +933,19 @@ def main():
 
     ts = touchscreen.TouchScreen()
 
+    # 每次启动必扫 WiFi 二维码（无硬编码 SSID/密码），成功后再推流
+    ip = phase_scan_wifi(disp, cam, ts)
+    if app.need_exit():
+        print("[ball] exit before stream")
+        return
+    if not ip:
+        print("[ball] no wifi, abort stream")
+        show_boot(disp, "No WiFi")
+        time.sleep_ms(1000)
+        return
+
+    start_mjpeg_server()
+
     roi = [ROI_X, ROI_Y, ROI_W, ROI_H]
     mode = DETECT_MODE
     pos_filt = 0.0
@@ -573,6 +960,7 @@ def main():
     pressed_last = False
     err_cnt = 0
     last_log_ms = 0
+    frame_n = 0
 
     if serial_dev is not None:
         if uart_write(serial_dev, pack_setpoint_frame(sp_mm)):
@@ -581,113 +969,118 @@ def main():
 
     print("[ball] UI EN: Exit | Set/Done | Reset")
 
-    while not app.need_exit():
-        try:
-            img = cam.read()
-            iw, ih = img.width(), img.height()
-            bgr = image.image2cv(img, ensure_bgr=False, copy=False)
+    try:
+        while not app.need_exit():
+            try:
+                img = cam.read()
+                iw, ih = img.width(), img.height()
+                bgr = image.image2cv(img, ensure_bgr=False, copy=False)
 
-            roi[0], roi[1], roi[2], roi[3] = ROI_X, ROI_Y, ROI_W, ROI_H
-            exit_btn, set_btn, reset_btn = layout_controls(iw, ih)
-            drag_strip = layout_drag_strip(iw, ih, roi, exit_btn)
-            det = detect_ball(bgr, roi, mode)
+                roi[0], roi[1], roi[2], roi[3] = ROI_X, ROI_Y, ROI_W, ROI_H
+                exit_btn, set_btn, reset_btn = layout_controls(iw, ih)
+                drag_strip = layout_drag_strip(iw, ih, roi, exit_btn)
+                det = detect_ball(bgr, roi, mode)
 
-            usable = bool(det["found"]) and int(det["conf"]) >= CONF_MIN
-            if usable:
-                if not has_filt:
-                    pos_filt = float(det["pos_mm"])
-                    has_filt = True
+                usable = bool(det["found"]) and int(det["conf"]) >= CONF_MIN
+                if usable:
+                    if not has_filt:
+                        pos_filt = float(det["pos_mm"])
+                        has_filt = True
+                    else:
+                        pos_filt = POS_ALPHA * float(det["pos_mm"]) + (1.0 - POS_ALPHA) * pos_filt
+                    pos_mm_i = quantize_mm(pos_filt, pos_mm_i, has_mm_i)
+                    has_mm_i = True
                 else:
-                    pos_filt = POS_ALPHA * float(det["pos_mm"]) + (1.0 - POS_ALPHA) * pos_filt
-                pos_mm_i = quantize_mm(pos_filt, pos_mm_i, has_mm_i)
-                has_mm_i = True
-            else:
-                has_filt = False
-                has_mm_i = False
-                pos_filt = 0.0
-                pos_mm_i = 0
+                    has_filt = False
+                    has_mm_i = False
+                    pos_filt = 0.0
+                    pos_mm_i = 0
 
-            tx, ty, pressed = ts.read()
-            mx, my = map_touch_to_image(tx, ty, iw, ih, disp.width(), disp.height())
+                tx, ty, pressed = ts.read()
+                mx, my = map_touch_to_image(tx, ty, iw, ih, disp.width(), disp.height())
 
-            if pressed and not pressed_last:
-                if is_in_button(mx, my, exit_btn):
-                    print("[ball] Exit @", mx, my)
-                    app.set_exit_flag(True)
-                elif is_in_button(mx, my, set_btn):
-                    set_mode = not set_mode
+                if pressed and not pressed_last:
+                    if is_in_button(mx, my, exit_btn):
+                        print("[ball] Exit @", mx, my)
+                        app.set_exit_flag(True)
+                    elif is_in_button(mx, my, set_btn):
+                        set_mode = not set_mode
+                        dragging_sp = False
+                        print("[ball] Set mode ->", set_mode)
+                    elif is_in_button(mx, my, reset_btn):
+                        sp_mm = 0
+                        sp_pending = True
+                        set_mode = False
+                        dragging_sp = False
+                        if serial_dev is not None:
+                            uart_write(serial_dev, pack_setpoint_frame(0))
+                            sp_pending = False
+                        print("[ball] Reset SP=0")
+                    elif set_mode and hit_drag_zone(mx, my, roi, drag_strip):
+                        dragging_sp = True
+                        sp_mm = roi_x_to_mm(mx, roi)
+                        sp_pending = True
+                        if serial_dev is not None:
+                            if uart_write(serial_dev, pack_setpoint_frame(sp_mm)):
+                                sp_pending = False
+                elif pressed and set_mode and dragging_sp:
+                    new_sp = roi_x_to_mm(mx, roi)
+                    if new_sp != sp_mm:
+                        sp_mm = new_sp
+                        sp_pending = True
+                        if serial_dev is not None:
+                            if uart_write(serial_dev, pack_setpoint_frame(sp_mm)):
+                                sp_pending = False
+                else:
+                    if dragging_sp:
+                        sp_pending = True
                     dragging_sp = False
-                    print("[ball] Set mode ->", set_mode)
-                elif is_in_button(mx, my, reset_btn):
-                    sp_mm = 0
-                    sp_pending = True
-                    set_mode = False
-                    dragging_sp = False
-                    if serial_dev is not None:
-                        uart_write(serial_dev, pack_setpoint_frame(0))
-                        sp_pending = False
-                    print("[ball] Reset SP=0")
-                elif set_mode and hit_drag_zone(mx, my, roi, drag_strip):
-                    dragging_sp = True
-                    sp_mm = roi_x_to_mm(mx, roi)
-                    sp_pending = True
-                    if serial_dev is not None:
+                pressed_last = pressed
+
+                fps = time.fps()
+                draw_ui(
+                    img, roi, det, pos_mm_i, sp_mm, usable,
+                    exit_btn, set_btn, reset_btn, drag_strip,
+                    set_mode, dragging_sp, fps,
+                )
+                frame_n += 1
+                if MJPEG_EVERY_N <= 1 or (frame_n % MJPEG_EVERY_N) == 0:
+                    publish_mjpeg(img)
+                disp.show(img)
+
+                now_ms = time.ticks_ms()
+                if serial_dev is not None and (now_ms - last_tx_ms) >= TX_MIN_MS:
+                    if sp_pending:
                         if uart_write(serial_dev, pack_setpoint_frame(sp_mm)):
                             sp_pending = False
-            elif pressed and set_mode and dragging_sp:
-                new_sp = roi_x_to_mm(mx, roi)
-                if new_sp != sp_mm:
-                    sp_mm = new_sp
-                    sp_pending = True
-                    if serial_dev is not None:
-                        if uart_write(serial_dev, pack_setpoint_frame(sp_mm)):
-                            sp_pending = False
-            else:
-                if dragging_sp:
-                    sp_pending = True
-                dragging_sp = False
-            pressed_last = pressed
+                    frame = pack_ball_frame(
+                        usable,
+                        pos_mm_i,
+                        det["cx"] if usable else 0,
+                        det["cy"] if usable else 0,
+                        det["conf"] if det["found"] else 0,
+                        mode,
+                    )
+                    uart_write(serial_dev, frame)
+                    last_tx_ms = now_ms
 
-            fps = time.fps()
-            draw_ui(
-                img, roi, det, pos_mm_i, sp_mm, usable,
-                exit_btn, set_btn, reset_btn, drag_strip,
-                set_mode, dragging_sp, fps,
-            )
-            disp.show(img)
-
-            now_ms = time.ticks_ms()
-            if serial_dev is not None and (now_ms - last_tx_ms) >= TX_MIN_MS:
-                if sp_pending:
-                    if uart_write(serial_dev, pack_setpoint_frame(sp_mm)):
-                        sp_pending = False
-                frame = pack_ball_frame(
-                    usable,
-                    pos_mm_i,
-                    det["cx"] if usable else 0,
-                    det["cy"] if usable else 0,
-                    det["conf"] if det["found"] else 0,
-                    mode,
-                )
-                uart_write(serial_dev, frame)
-                last_tx_ms = now_ms
-
-            if (now_ms - last_log_ms) >= 1000:
-                last_log_ms = now_ms
-                print(
-                    "[ball] pos=%+d sp=%+d set=%d fps=%.1f"
-                    % (pos_mm_i, sp_mm, int(set_mode), fps)
-                )
-        except Exception as e:
-            err_cnt += 1
-            print("[ball] loop err:", e)
-            time.sleep_ms(200)
-            if err_cnt > 30:
-                break
-
-    if serial_dev is not None:
-        uart_write(serial_dev, pack_ball_frame(False, 0, 0, 0, 0, mode))
-    print("[ball] exit")
+                if (now_ms - last_log_ms) >= 1000:
+                    last_log_ms = now_ms
+                    print(
+                        "[ball] pos=%+d sp=%+d set=%d fps=%.1f"
+                        % (pos_mm_i, sp_mm, int(set_mode), fps)
+                    )
+            except Exception as e:
+                err_cnt += 1
+                print("[ball] loop err:", e)
+                time.sleep_ms(200)
+                if err_cnt > 30:
+                    break
+    finally:
+        stop_mjpeg_server()
+        if serial_dev is not None:
+            uart_write(serial_dev, pack_ball_frame(False, 0, 0, 0, 0, mode))
+        print("[ball] exit")
 
 
 if __name__ == "__main__":

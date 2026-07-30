@@ -1,10 +1,10 @@
 id: ball_opencv
 name: Ball OpenCV
 name[zh]: 钢珠OpenCV
-version: 1.1.0
-author: line_tracker_car
-desc: OpenCV ball pos UART type=0x02 + setpoint 0x12 for balance
-desc[zh]: 凹槽钢珠检测，串口对接 balance 闭环（0x02球位/0x12定点）
+version: 1.3.0
+author: nuedc
+desc: QR WiFi + OpenCV ball UART 0x02/0x12 + MJPEG /stream HUD
+desc[zh]: 扫码连热点，凹槽钢珠UART对接balance，本机屏+手机MJPEG双显
 exclude:
   - .vscode
   - dist
@@ -12,3 +12,5 @@ exclude:
 files:
   - app.yaml
   - main.py
+  - README.md
+icon: ''

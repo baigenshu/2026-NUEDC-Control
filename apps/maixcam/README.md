@@ -17,8 +17,8 @@ apps/maixcam/
 |------|------|----------|
 | `collect/` | 拍图存 `/root/datasets/detect/` | 无模型 |
 | `detect_ball/` | YOLO11+ByteTrack+轨精修→s 串口 | `/root/models/2026H/steel_ball_v11n/yolo11n_ball.mud` |
-| `opencv/` | 凹槽检测 → balance `0x02`/`0x12` 闭环停球 | OpenCV + UART |
-| `../stream/maix_phone/` | 钢珠检测 **Web**（连手机热点） | 同上 YOLO11 模型 |
+| `opencv/` | 扫码连热点 → 凹槽检测 `0x02`/`0x12` + 本机/手机 MJPEG | OpenCV + UART + WiFi QR |
+| `../stream/maix_phone/` | 纯 MJPEG 推流（无检测，备用） | 相机 + WiFi |
 | `red_track/` | 色块跟踪 + 姿态串口 | 云台 UART |
 | `tools/` | 在 PC 上跑 | pyserial |
 
