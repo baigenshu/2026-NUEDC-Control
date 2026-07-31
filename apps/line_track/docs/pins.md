@@ -24,10 +24,15 @@ PB19, PB17, PA16, PA14, PB20, PB25, PA25, PA27（上拉；GRAY_ACTIVE_LOW）
 
 SPI1 PB9 SCLK / PB8 PICO · CS PB14 · DC PB11 · RES PB10（SH1106，列偏移 2）
 
-## 按键
+## 按键（外接，低有效，内部上拉）
 
-B21 = PB21 上拉，按下=低 → 巡线开关
+| 键 | 脚 | 功能 |
+|----|-----|------|
+| KEY_RUN | PA17 | 电机开/关 |
+| KEY_SPD | PA18 | 档位 0→1000→2000→3000→0 |
+
+灰度预留勿占：PB19, PB17, PA16, PA14, PB20, PB25, PA25, PA27
 
 ## 其它（板载，软件暂不用）
 
-DEBUG UART0 PA10/11 · TRANS UART1 PA8/9 · OUT2 UART2 PA23/24
+DEBUG UART0 PA10/11 · TRANS UART1 PA8/9 · OUT2 UART2 PA23/24 · 板载 B21
