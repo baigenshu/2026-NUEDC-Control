@@ -5,7 +5,7 @@
 #include "ti_msp_dl_config.h"
 
 #ifndef IR4_ACTIVE_LOW
-#define IR4_ACTIVE_LOW  (0)
+#define IR4_ACTIVE_LOW  (1)          /* 硬件 active-low：压线输出0 → 翻转为1=压线 */
 #endif
 
 typedef struct {

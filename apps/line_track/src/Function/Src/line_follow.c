@@ -151,9 +151,10 @@ void LineFollow_Update(void)
     if (pid > pid_lim)   pid = pid_lim;
     if (pid < -pid_lim)  pid = -pid_lim;
 
-    /* ---- 4. 有符号差速（允许内轮反转）---- */
-    left_f  = (float)s_base_spd - pid;
-    right_f = (float)s_base_spd + pid;
+    /* ---- 4. 有符号差速（允许内轮反转）----
+     * error>0 线偏右 → pid>0 → 左轮加速、右轮减速 → 右转 */
+    left_f  = (float)s_base_spd + pid;
+    right_f = (float)s_base_spd - pid;
     maxv    = (float)s_base_spd * LF_MAX_SPD_FRAC;
     if (left_f  >  maxv) left_f  =  maxv;
     if (left_f  < -maxv) left_f  = -maxv;

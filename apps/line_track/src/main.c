@@ -253,12 +253,12 @@ int main(void)
             t_hb = now;
             hb_cnt++;
             UartDebug_Printf(
-                "HB #%lu en=%d g=%u spd=%d m=%02X e=%.1f st=%d "
+                "HB #%lu en=%d g=%u spd=%d m=%02X e=%ld st=%d "
                 "enc=%ld,%ld,%ld,%ld\n",
                 (unsigned long)hb_cnt,
                 LineFollow_IsEnabled() ? 1 : 0, (unsigned)s_gear_idx,
                 (int)s_spd, (unsigned)LineFollow_GetMask(),
-                (double)LineFollow_GetError(),
+                (long)(LineFollow_GetError() * 10.0f),  /* e×10，单位0.1 */
                 (int)LineFollow_GetState(),
                 (long)s_ea, (long)s_eb, (long)s_ec, (long)s_ed);
         }

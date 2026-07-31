@@ -14,25 +14,25 @@
  * ================================================================ */
 #define SPD_GEAR_0                     (0)
 #define SPD_GEAR_1                     (5)
-#define SPD_GEAR_2                     (10)
-#define SPD_GEAR_3                     (18)
+#define SPD_GEAR_2                     (15)
+#define SPD_GEAR_3                     (20)
 #define SPD_GEAR_COUNT                 (4)
 
 /* ================================================================
  * 传感器权重（左负右正，取自参考工程）
  *   外侧权重大（±8）、内侧小（±0.5），偏离时外侧主导
  * ================================================================ */
-#define LF_W0                          (-1.0f)
-#define LF_W1                          (-0.5f)
-#define LF_W2                          (+0.5f)
-#define LF_W3                          (+1.0f)
+#define LF_W0                          (-3.0f)
+#define LF_W1                          (-0.4f)
+#define LF_W2                          (+0.4f)
+#define LF_W3                          (+3.0f)
 
 /* ================================================================
  * 位置 PID（线偏移 → 速度修正），位置式，积分限幅
  *   pid = LF_KP*error + LF_KI*integral + LF_KD*(error-last_error)
  *   增益取自参考工程，需上机精调
  * ================================================================ */
-#define LF_KP                          (4.0f)
+#define LF_KP                          (6.0f)
 #define LF_KI                          (0.03f)
 #define LF_KD                          (1.2f)
 #define LF_I_MAX                       (15.0f)
