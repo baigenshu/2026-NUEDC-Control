@@ -127,14 +127,12 @@ void LineFollow_Update(void)
         }
     }
 
-    /* ---- 2. 加权线位置（丢线则向最后所见方向外推，见 LF_LOST_STEP）---- */
+    /* ---- 2. 加权线位置（丢线则向最后所见方向瞬间大幅补偿，见 LF_LOST_ERR）---- */
     if (s_active == 0u) {
-        if (s_last_error < 0.f) {            /* 线在左 p1-p2 间隙 → 向 W0 外推 */
-            s_error = s_last_error - LF_LOST_STEP;
-            if (s_error < LF_W0) s_error = LF_W0;
-        } else if (s_last_error > 0.f) {     /* 线在右 p3-p4 间隙 → 向 W3 外推 */
-            s_error = s_last_error + LF_LOST_STEP;
-            if (s_error > LF_W3) s_error = LF_W3;
+        if (s_last_error < 0.f) {            /* 线在左 p1-p2 间隙 → 大幅左修 */
+            s_error = -LF_LOST_ERR;
+        } else if (s_last_error > 0.f) {     /* 线在右 p3-p4 间隙 → 大幅右修 */
+            s_error = +LF_LOST_ERR;
         } else {
             s_error = 0.f;                   /* 方向未定（启动/居中丢线）*/
         }
@@ -148,8 +146,10 @@ void LineFollow_Update(void)
     }
 
     /* ---- 3. 位置 PID（位置式，积分限幅）---- */
-    s_integral += s_error;
-    if (s_integral > LF_I_MAX)  s_integral = LF_I_MAX;
+    if (s_active != 0u) {
+        s_integral += s_error;            /* 线可见才累积；丢线冻结，防外推±LF_LOST_ERR 灌爆积分 */
+    }
+    if (s_integral >  LF_I_MAX) s_integral =  LF_I_MAX;
     if (s_integral < -LF_I_MAX) s_integral = -LF_I_MAX;
 
     deriv = s_error - s_last_error;
