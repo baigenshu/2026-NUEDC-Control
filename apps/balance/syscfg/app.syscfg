@@ -15,6 +15,7 @@ const TIMER   = scripting.addModule("/ti/driverlib/TIMER", {}, false);
 const TIMER1  = TIMER.addInstance();
 const UART    = scripting.addModule("/ti/driverlib/UART", {}, false);
 const UART1   = UART.addInstance();
+const UART2   = UART.addInstance();
 
 const divider7       = system.clockTree["PLL_PDIV"];
 divider7.divideValue = 2;
@@ -67,6 +68,22 @@ UART1.rxPinConfig.hideOutputInversion  = scripting.forceWrite(false);
 UART1.rxPinConfig.onlyInternalResistor = scripting.forceWrite(false);
 UART1.rxPinConfig.passedPeripheralType = scripting.forceWrite("Digital");
 UART1.rxPinConfig.$name                = "ti_driverlib_gpio_GPIOPinGeneric_vis_rx";
+
+/* TMC2209 UART: MCU PA8 TX / PA9 RX, 115200 8N1 */
+UART2.$name                            = "TMC_UART";
+UART2.targetBaudRate                   = 115200;
+UART2.peripheral.$assign               = "UART1";
+UART2.peripheral.txPin.$assign         = "PA8";
+UART2.peripheral.rxPin.$assign         = "PA9";
+UART2.txPinConfig.direction             = scripting.forceWrite("OUTPUT");
+UART2.txPinConfig.hideOutputInversion   = scripting.forceWrite(false);
+UART2.txPinConfig.onlyInternalResistor  = scripting.forceWrite(false);
+UART2.txPinConfig.passedPeripheralType  = scripting.forceWrite("Digital");
+UART2.txPinConfig.$name                 = "ti_driverlib_gpio_GPIOPinGeneric_tmc_tx";
+UART2.rxPinConfig.hideOutputInversion   = scripting.forceWrite(false);
+UART2.rxPinConfig.onlyInternalResistor  = scripting.forceWrite(false);
+UART2.rxPinConfig.passedPeripheralType  = scripting.forceWrite("Digital");
+UART2.rxPinConfig.$name                 = "ti_driverlib_gpio_GPIOPinGeneric_tmc_rx";
 
 SYSCTL.clockTreeEn           = true;
 SYSCTL.forceDefaultClkConfig = true;

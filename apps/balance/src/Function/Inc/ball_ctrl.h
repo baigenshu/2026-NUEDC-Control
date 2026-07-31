@@ -1,6 +1,8 @@
 /**
  * @file ball_ctrl.h
- * @brief 视觉球位单环位置 PID → 丝杆倾角
+ * @brief 视觉球位单环位置 PD → 曲柄/摆杆倾角
+ *
+ * 初步目标：小车静止时，把钢珠停在 O 或任意定点。
  */
 #ifndef BALL_CTRL_H
 #define BALL_CTRL_H
@@ -37,7 +39,7 @@ void BallCtrl_Update(void);
 
 ball_ctrl_state_t BallCtrl_GetState(void);
 int32_t BallCtrl_GetBallMm_x100(void);     /* 滤波后球位 */
-int32_t BallCtrl_GetRodMm_x100(void);      /* 当前倾角指令 */
+int32_t BallCtrl_GetRodMm_x100(void);      /* 当前倾角指令（0.01 unit） */
 bool    BallCtrl_IsSettled(void);
 
 #endif /* BALL_CTRL_H */

@@ -1,7 +1,7 @@
 # Ball OpenCV → balance + MJPEG
 
 与 `apps/balance` 视觉协议对接（`docs/vision_proto.md`）。  
-启动扫 WiFi 二维码连热点 → 本机屏 HUD + 手机 MJPEG 双显。
+启动复用已有 WiFi，或扫码连接（可 Skip）；有网才开本机屏 HUD + 手机 MJPEG。
 
 ## 接线（3.3V 共地）
 
@@ -17,33 +17,27 @@
 
 | type | 内容 | 周期 |
 |------|------|------|
-| `0x02` | 球位 pos 1mm + conf + cx/cy | ≥20 ms |
+| `0x02` | 球位 pos 1mm + conf + cx/cy | 每检测帧（`TX_MIN_MS=0`） |
 | `0x12` | 停球定点（屏 **Set** 拖动 / Reset / 上电同步） | 变更时 |
 
 - `conf < 30` 强制 `found=0`（与 MCU `BALL_CONF_MIN` 一致）
 - 退出时发一帧 lost，主控倾角回水平
 - 本地跟踪：`update_track` 一维匀速预测，抑制 ROI 跳变；短时丢球/跳变可 hold
 
-## WiFi 扫码（每次启动必扫）
+## WiFi 启动流程
 
-**无硬编码 SSID/密码。** 启动后先进入扫码界面，扫到可联网二维码并连接成功后，才
-开启检测与推流。
+1. **已连接** → 直接复用现有 IP，进入主界面  
+2. **未连接** → 扫码界面（右下 **Skip** 可跳过）  
+3. **Skip / 无网** → 仍可检测 + UART，**禁用 MJPEG 图传**  
+4. 主页 **Menu → WiFi** 可手动重连（同样可 Skip）
 
-1. 手机开热点  
-2. 系统「分享 WiFi 二维码」，或 [maixhub.com/wifi](https://maixhub.com/wifi) 生
-成  
-3. 对准 Maix 摄像头  
-4. 屏显 `WiFi OK` + IP 后进入主界面  
-
-支持 payload：
+无硬编码 SSID/密码。支持 payload：
 
 ```text
 WIFI:T:WPA;S:热点名;P:密码;;
 WIFI:T:nopass;S:开放热点;;
 ssid|password
 ```
-
-连接失败会提示 `Fail, rescan` 并继续扫。
 
 | 常量 | 默认 |
 |------|------|
@@ -53,21 +47,29 @@ ssid|password
 
 - 黄线：O 点  
 - 粉线：当前 setpoint（Set 模式可拖）  
-- **Exit | Set/Done | Reset**
+- 右上：FPS + `Live`（手机在看）/ `WiFi`（有网）/ `NoNet`  
+- 底栏：**Menu** | **Set/Done** | **Reset**  
+  - Menu 展开：上方 **WiFi** / **Exit**  
+  - 点空白处可收起 Menu
 
 ## 手机双显（MJPEG）
 
-1. 扫码连上后，串口打印：`[ball] MJPEG: http://<MaixIP>:8000/stream`  
-2. 手机浏览器 / App 打开该 URL（`/` 同流）  
-3. 画面带 HUD（ROI / 球点 / SP / FPS），与本机屏一致  
+仅在有有效 WiFi 时启用：
+
+1. 串口打印：`[ball] MJPEG: http://<MaixIP>:8000/stream`  
+2. 手机浏览器打开该 URL（`/` 同流）  
+3. 画面带 HUD，与本机屏一致  
 4. **SP 仍在 Maix 触摸屏设置**，手机默认只监视  
 
 | 常量 | 默认 | 说明 |
 |------|------|------|
-| `ENABLE_MJPEG` | True | 关推流可关 |
+| `ENABLE_MJPEG` | True | 总开关；无 WiFi 时仍不推流 |
 | `HTTP_PORT` | 8000 | |
-| `JPEG_QUALITY` | 45 | |
-| `MJPEG_EVERY_N` | 1 | 隔帧编码减负 |
+| `JPEG_QUALITY` | 45 | 异步编码，不挡检测 |
+| `MJPEG_EVERY_N` | 2 | 有客户端时隔帧编码 |
+| `DISP_EVERY_N` | 3 | 本机 LCD 隔帧；无刷新帧跳过 HUD |
+| `SEARCH_HALF_W` | 56 | 跟踪锁定后局部搜索半宽 (px) |
+| `SKIP_BLUR` | True | 细 ROI 跳过 blur |
 
 ## 跟踪参数
 
