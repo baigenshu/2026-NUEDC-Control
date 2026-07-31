@@ -132,6 +132,22 @@ extern "C" {
 #define DEBUG_UART_BAUD_RATE                                            (115200)
 #define DEBUG_UART_IBRD_40_MHZ_115200_BAUD                                  (21)
 #define DEBUG_UART_FBRD_40_MHZ_115200_BAUD                                  (45)
+/* Defines for IMU601 */
+#define IMU601_INST                                                        UART2
+#define IMU601_INST_FREQUENCY                                           40000000
+#define IMU601_INST_IRQHandler                                  UART2_IRQHandler
+#define IMU601_INST_INT_IRQN                                      UART2_INT_IRQn
+#define GPIO_IMU601_RX_PORT                                                GPIOA
+#define GPIO_IMU601_TX_PORT                                                GPIOA
+#define GPIO_IMU601_RX_PIN                                        DL_GPIO_PIN_24
+#define GPIO_IMU601_TX_PIN                                        DL_GPIO_PIN_23
+#define GPIO_IMU601_IOMUX_RX                                     (IOMUX_PINCM54)
+#define GPIO_IMU601_IOMUX_TX                                     (IOMUX_PINCM53)
+#define GPIO_IMU601_IOMUX_RX_FUNC                      IOMUX_PINCM54_PF_UART2_RX
+#define GPIO_IMU601_IOMUX_TX_FUNC                      IOMUX_PINCM53_PF_UART2_TX
+#define IMU601_BAUD_RATE                                                (115200)
+#define IMU601_IBRD_40_MHZ_115200_BAUD                                      (21)
+#define IMU601_FBRD_40_MHZ_115200_BAUD                                      (45)
 
 
 
@@ -152,43 +168,11 @@ extern "C" {
 
 
 
-/* Port definition for Pin Group SPI_OLED_CTRL */
-#define SPI_OLED_CTRL_PORT                                               (GPIOB)
+/* Defines for DMA_CH0 */
+#define DMA_CH0_CHAN_ID                                                      (0)
+#define IMU601_INST_DMA_TRIGGER                              (DMA_UART2_RX_TRIG)
 
-/* Defines for CS: GPIOB.14 with pinCMx 31 on package pin 2 */
-#define SPI_OLED_CTRL_CS_PIN                                    (DL_GPIO_PIN_14)
-#define SPI_OLED_CTRL_CS_IOMUX                                   (IOMUX_PINCM31)
-/* Defines for DC: GPIOB.11 with pinCMx 28 on package pin 63 */
-#define SPI_OLED_CTRL_DC_PIN                                    (DL_GPIO_PIN_11)
-#define SPI_OLED_CTRL_DC_IOMUX                                   (IOMUX_PINCM28)
-/* Defines for RES: GPIOB.10 with pinCMx 27 on package pin 62 */
-#define SPI_OLED_CTRL_RES_PIN                                   (DL_GPIO_PIN_10)
-#define SPI_OLED_CTRL_RES_IOMUX                                  (IOMUX_PINCM27)
-/* Port definition for Pin Group GPIO_KEY */
-#define GPIO_KEY_PORT                                                    (GPIOA)
 
-/* Defines for RUN: GPIOA.17 with pinCMx 39 on package pin 10 */
-#define GPIO_KEY_RUN_PIN                                        (DL_GPIO_PIN_17)
-#define GPIO_KEY_RUN_IOMUX                                       (IOMUX_PINCM39)
-/* Defines for SPD: GPIOA.15 with pinCMx 37 on package pin 8 */
-#define GPIO_KEY_SPD_PIN                                        (DL_GPIO_PIN_15)
-#define GPIO_KEY_SPD_IOMUX                                       (IOMUX_PINCM37)
-/* Defines for P1: GPIOB.19 with pinCMx 45 on package pin 16 */
-#define GPIO_IR_P1_PORT                                                  (GPIOB)
-#define GPIO_IR_P1_PIN                                          (DL_GPIO_PIN_19)
-#define GPIO_IR_P1_IOMUX                                         (IOMUX_PINCM45)
-/* Defines for P2: GPIOB.17 with pinCMx 43 on package pin 14 */
-#define GPIO_IR_P2_PORT                                                  (GPIOB)
-#define GPIO_IR_P2_PIN                                          (DL_GPIO_PIN_17)
-#define GPIO_IR_P2_IOMUX                                         (IOMUX_PINCM43)
-/* Defines for P3: GPIOA.16 with pinCMx 38 on package pin 9 */
-#define GPIO_IR_P3_PORT                                                  (GPIOA)
-#define GPIO_IR_P3_PIN                                          (DL_GPIO_PIN_16)
-#define GPIO_IR_P3_IOMUX                                         (IOMUX_PINCM38)
-/* Defines for P4: GPIOA.14 with pinCMx 36 on package pin 7 */
-#define GPIO_IR_P4_PORT                                                  (GPIOA)
-#define GPIO_IR_P4_PIN                                          (DL_GPIO_PIN_14)
-#define GPIO_IR_P4_IOMUX                                         (IOMUX_PINCM36)
 /* Port definition for Pin Group GPIO_MOTOR */
 #define GPIO_MOTOR_PORT                                                  (GPIOB)
 
@@ -267,6 +251,43 @@ extern "C" {
 #define GPIO_ENCODERD_E4B_IIDX                              (DL_GPIO_IIDX_DIO26)
 #define GPIO_ENCODERD_E4B_PIN                                   (DL_GPIO_PIN_26)
 #define GPIO_ENCODERD_E4B_IOMUX                                  (IOMUX_PINCM57)
+/* Port definition for Pin Group SPI_OLED_CTRL */
+#define SPI_OLED_CTRL_PORT                                               (GPIOB)
+
+/* Defines for CS: GPIOB.14 with pinCMx 31 on package pin 2 */
+#define SPI_OLED_CTRL_CS_PIN                                    (DL_GPIO_PIN_14)
+#define SPI_OLED_CTRL_CS_IOMUX                                   (IOMUX_PINCM31)
+/* Defines for DC: GPIOB.11 with pinCMx 28 on package pin 63 */
+#define SPI_OLED_CTRL_DC_PIN                                    (DL_GPIO_PIN_11)
+#define SPI_OLED_CTRL_DC_IOMUX                                   (IOMUX_PINCM28)
+/* Defines for RES: GPIOB.10 with pinCMx 27 on package pin 62 */
+#define SPI_OLED_CTRL_RES_PIN                                   (DL_GPIO_PIN_10)
+#define SPI_OLED_CTRL_RES_IOMUX                                  (IOMUX_PINCM27)
+/* Port definition for Pin Group GPIO_KEY */
+#define GPIO_KEY_PORT                                                    (GPIOA)
+
+/* Defines for RUN: GPIOA.17 with pinCMx 39 on package pin 10 */
+#define GPIO_KEY_RUN_PIN                                        (DL_GPIO_PIN_17)
+#define GPIO_KEY_RUN_IOMUX                                       (IOMUX_PINCM39)
+/* Defines for SPD: GPIOA.15 with pinCMx 37 on package pin 8 */
+#define GPIO_KEY_SPD_PIN                                        (DL_GPIO_PIN_15)
+#define GPIO_KEY_SPD_IOMUX                                       (IOMUX_PINCM37)
+/* Defines for P1: GPIOB.19 with pinCMx 45 on package pin 16 */
+#define GPIO_IR_P1_PORT                                                  (GPIOB)
+#define GPIO_IR_P1_PIN                                          (DL_GPIO_PIN_19)
+#define GPIO_IR_P1_IOMUX                                         (IOMUX_PINCM45)
+/* Defines for P2: GPIOB.17 with pinCMx 43 on package pin 14 */
+#define GPIO_IR_P2_PORT                                                  (GPIOB)
+#define GPIO_IR_P2_PIN                                          (DL_GPIO_PIN_17)
+#define GPIO_IR_P2_IOMUX                                         (IOMUX_PINCM43)
+/* Defines for P3: GPIOA.16 with pinCMx 38 on package pin 9 */
+#define GPIO_IR_P3_PORT                                                  (GPIOA)
+#define GPIO_IR_P3_PIN                                          (DL_GPIO_PIN_16)
+#define GPIO_IR_P3_IOMUX                                         (IOMUX_PINCM38)
+/* Defines for P4: GPIOA.14 with pinCMx 36 on package pin 7 */
+#define GPIO_IR_P4_PORT                                                  (GPIOA)
+#define GPIO_IR_P4_PIN                                          (DL_GPIO_PIN_14)
+#define GPIO_IR_P4_IOMUX                                         (IOMUX_PINCM36)
 
 
 
@@ -279,7 +300,9 @@ void SYSCFG_DL_SYSCTL_init(void);
 void SYSCFG_DL_PWMA_init(void);
 void SYSCFG_DL_PWMB_init(void);
 void SYSCFG_DL_DEBUG_UART_init(void);
+void SYSCFG_DL_IMU601_init(void);
 void SYSCFG_DL_SPI_OLED_init(void);
+void SYSCFG_DL_DMA_init(void);
 
 void SYSCFG_DL_SYSTICK_init(void);
 

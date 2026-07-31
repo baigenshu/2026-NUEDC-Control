@@ -3,7 +3,7 @@
  * @brief 四路红外巡线 · 编码器闭环速度控制
  *
  * 每 10ms 控制周期：
- *   传感器读数 → 加权线位置 → P 控制器修正 → 左右速度目标 → 四轮速度 PID
+ *   传感器读数 → 加权线位置 → PID 修正 → 左右速度目标 → 四轮增量式 PI
  */
 #ifndef LINE_FOLLOW_H
 #define LINE_FOLLOW_H

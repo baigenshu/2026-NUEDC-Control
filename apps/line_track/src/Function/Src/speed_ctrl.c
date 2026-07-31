@@ -1,8 +1,8 @@
 /**
  * @file speed_ctrl.c
- * @brief 四轮独立速度 PID（编码器反馈 → PWM）
+ * @brief 四轮独立增量式 PI（编码器反馈 → PWM）
  *
- * 每路独立 PID 回路，目标/反馈单位统一为 encoder pulses / 控制周期。
+ * 每路独立增量式 PI 回路，目标/反馈单位统一为 encoder pulses / 控制周期。
  * 输出直接送 Motor_Set，内部处理 POL_A/B/C/D 极性修正。
  */
 #include "speed_ctrl.h"
@@ -13,11 +13,10 @@
 
 /* ---- 状态 ---- */
 static bool     s_enabled;
-static int16_t  s_target[SPEED_ID_COUNT];   /* pulses/sample */
-static float    s_integral[SPEED_ID_COUNT];
-static float    s_last_err[SPEED_ID_COUNT];
-static int32_t  s_last_enc[SPEED_ID_COUNT]; /* raw accumulated encoder */
-static int32_t  s_delta[SPEED_ID_COUNT];    /* last delta for telemetry */
+static int16_t  s_target[SPEED_ID_COUNT];     /* pulses/sample */
+static float    s_out[SPEED_ID_COUNT];        /* 增量式PI累计输出（PWM duty） */
+static float    s_last_bias[SPEED_ID_COUNT];  /* 上次速度偏差 */
+static int32_t  s_delta[SPEED_ID_COUNT];      /* last delta for telemetry */
 
 /* ---- 每路极性（前进 = 正 duty 经过 POL 后送电机） ---- */
 static const int8_t s_pol[SPEED_ID_COUNT] = {
@@ -35,13 +34,6 @@ static float clampf(float v, float lo, float hi)
     return v;
 }
 
-static int16_t limit_duty(float v)
-{
-    if (v > SPD_OUT_MAX)  return (int16_t)SPD_OUT_MAX;
-    if (v < -SPD_OUT_MAX) return (int16_t)(-SPD_OUT_MAX);
-    return (int16_t)v;
-}
-
 /* ================================================================
  * Public API
  * ================================================================ */
@@ -57,11 +49,10 @@ void SpeedCtrl_Reset(void)
     uint8_t i;
 
     for (i = 0; i < SPEED_ID_COUNT; ++i) {
-        s_target[i]   = 0;
-        s_integral[i] = 0.f;
-        s_last_err[i] = 0.f;
-        s_last_enc[i] = Encoder_Get((enc_id_t)i);
-        s_delta[i]    = 0;
+        s_target[i]    = 0;
+        s_out[i]       = 0.f;
+        s_last_bias[i] = 0.f;
+        s_delta[i]     = 0;
     }
 }
 
@@ -71,8 +62,8 @@ void SpeedCtrl_SetEnable(bool on)
     if (!on) {
         uint8_t i;
         for (i = 0; i < SPEED_ID_COUNT; ++i) {
-            s_integral[i] = 0.f;
-            s_last_err[i] = 0.f;
+            s_out[i]       = 0.f;   /* 清零累计输出，避免再启动跳变 */
+            s_last_bias[i] = 0.f;
         }
     }
 }
@@ -105,29 +96,27 @@ void SpeedCtrl_Update(void)
     Motor_SetEnable(true);
 
     for (i = 0; i < SPEED_ID_COUNT; ++i) {
-        float    err, p, d, out;
-        int32_t  raw_now;
+        float    bias;
         int16_t  duty_signed;
 
         /* 编码器增量（pulses/sample，前进为正） */
         s_delta[i] = Encoder_ReadDelta((enc_id_t)i);
 
-        /* 速度误差 */
-        err = (float)s_target[i] - (float)s_delta[i];
+        /* 速度偏差 */
+        bias = (float)s_target[i] - (float)s_delta[i];
 
-        /* PID */
-        p  = SPD_KP * err;
+        /* 增量式 PI（移植自参考工程 Velocity_A/B）
+         *   u(k) = u(k-1) + SPD_KP*bias + SPD_KI*(bias - last_bias)
+         *   SPD_KP*bias             偏差积分项（累计成 PWM）
+         *   SPD_KI*(bias-last_bias) 偏差变化项（限制加速度/抑制震荡） */
+        s_out[i] += SPD_KP * bias + SPD_KI * (bias - s_last_bias[i]);
+        s_last_bias[i] = bias;
 
-        s_integral[i] += SPD_KI * err;
-        s_integral[i]  = clampf(s_integral[i], -SPD_I_MAX, SPD_I_MAX);
+        /* 限幅累计输出本身，防积分饱和（同参考工程对 ControlVelocity 限幅） */
+        s_out[i] = clampf(s_out[i], -SPD_OUT_MAX, SPD_OUT_MAX);
+        duty_signed = (int16_t)s_out[i];
 
-        d  = SPD_KD * (err - s_last_err[i]);
-        s_last_err[i] = err;
-
-        out = p + s_integral[i] + d;
-        duty_signed = limit_duty(out);
-
-        /* 死区处理 */
+        /* 死区处理（克服启动静摩擦） */
         if (duty_signed > 0 && duty_signed < PWM_DEADZONE)
             duty_signed = (int16_t)PWM_DEADZONE;
         else if (duty_signed < 0 && duty_signed > -(int16_t)PWM_DEADZONE)

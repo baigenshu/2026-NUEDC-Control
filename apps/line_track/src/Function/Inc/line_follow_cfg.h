@@ -1,6 +1,6 @@
 /**
  * @file line_follow_cfg.h
- * @brief 四路红外巡线参数 · 四轮速度 PID（编码器闭环）
+ * @brief 四路红外巡线参数 · 四轮增量式 PI（编码器闭环）
  *
  * 传感器几何（左→右 p1..p4）：
  *   p1-p2 = 32.9mm  p2-p3 = 14.5mm  p3-p4 = 32.9mm
@@ -46,18 +46,22 @@
 #define LF_MAX_SPD_FRAC                (1.25f)
 
 /* ================================================================
- * 四轮速度 PID（编码器反馈 → PWM 占空比）
+ * 四轮速度环 —— 增量式 PI（移植自参考工程 Velocity_A/B）
  *
- * 输入单位：encoder pulses / 10ms
- * 输出单位：PWM duty（直接送给 Motor_Set，含符号）
+ *   u(k) = u(k-1) + SPD_KP*bias + SPD_KI*(bias - last_bias)
+ *   bias = 目标速度 - 编码器增量 (pulses / 10ms)
+ *   输入单位：encoder pulses / 10ms
+ *   输出单位：PWM duty（直接送给 Motor_Set，含符号）
  *
- * 标定参考：PWM_MAX ≈ 满速 ≈ 60–80 pulses/10ms（MG310, 空载）
- *   Kp ≈ PWM_MAX / 80 * 0.5 ≈ 25
+ *   SPD_KP  作用于 bias      —— 累计成 PWM（积分作用）
+ *   SPD_KI  作用于 Δbias     —— 限制加速度/抑制震荡
+ *   输出 u 即 PWM duty，限幅 ±SPD_OUT_MAX（对齐 motor_cfg.h PWM_MAX）
+ *
+ * 注：增益取自参考工程（两轮/PWM周期8000/限幅±6000）；本工程为四轮/PWM周期4000/
+ *     限幅±3800/编码器PPR不同，上电后必须重新精调 SPD_KP / SPD_KI。
  * ================================================================ */
-#define SPD_KP                         (25.0f)
-#define SPD_KI                         (6.0f)
-#define SPD_KD                         (3.0f)
-#define SPD_I_MAX                      (800.0f)   /* 积分限幅 (PWM) */
+#define SPD_KP                         (28.0f)    /* 增量式PI：偏差积分项 */
+#define SPD_KI                         (2.0f)     /* 增量式PI：偏差变化项（加速度限制） */
 #define SPD_OUT_MAX                    (3800.0f)  /* 输出限幅 (PWM)，对齐 motor_cfg.h PWM_MAX */
 
 #endif /* LINE_FOLLOW_CFG_H */

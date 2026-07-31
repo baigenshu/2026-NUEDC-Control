@@ -1,8 +1,8 @@
 /**
  * @file speed_ctrl.h
- * @brief 四轮独立速度 PID 闭环
+ * @brief 四轮独立增量式 PI 闭环
  *
- * 每路：目标速度（encoder pulses/10ms）→ 编码器反馈 → PID → PWM 占空比
+ * 每路：目标速度（encoder pulses/10ms）→ 编码器反馈 → 增量式 PI → PWM 占空比
  * 内部处理电机极性（POL_A/B/C/D），上层只需给定前进为正的速度值。
  */
 #ifndef SPEED_CTRL_H
@@ -32,7 +32,7 @@ void SpeedCtrl_SetTargetLR(int16_t left_spd, int16_t right_spd);
 
 /**
  * 每控制周期调用：
- *   读编码器增量 → 四路独立 PID → Motor_Set（含 POL 修正）
+ *   读编码器增量 → 四路独立增量式 PI → Motor_Set（含 POL 修正）
  */
 void SpeedCtrl_Update(void);
 

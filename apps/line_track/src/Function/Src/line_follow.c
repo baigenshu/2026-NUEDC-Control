@@ -5,7 +5,7 @@
  * 每 10ms 控制周期：
  *   传感器读数 → 加权线位置 → 位置 PID → 有符号差速（左右速度目标）
  *   → SpeedCtrl_SetTargetLR → SpeedCtrl_Update（四路速度 PID → PWM）
- * 算法移植自参考工程（无锐角状态机；允许内轮反转）。
+ * 算法移植自参考工程（直道+圆弧弯道；内环增量式PI；允许内轮反转）。
  */
 #include "line_follow.h"
 #include "line_follow_cfg.h"
