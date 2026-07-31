@@ -4,6 +4,7 @@
  */
 #include "tmc2209.h"
 #include "tmc2209_cfg.h"
+#include "stepper_cfg.h"
 #include "ti_msp_dl_config.h"
 
 #if defined(TMC_UART_INST)
@@ -133,7 +134,7 @@ void TMC2209_Init(void)
     delay_cycles(800000u); /* ~10 ms @ 80 MHz */
 
     /* UART 强制微步，覆盖 MS1/MS2 硬件脚 */
-    (void)TMC2209_SetMicrosteps(16u);
+    (void)TMC2209_SetMicrosteps(STEPPER_MICROSTEPS);
 
     (void)TMC2209_SetCurrentCodes(
         current_code_from_ma(TMC2209_IHOLD_MA),
@@ -141,7 +142,7 @@ void TMC2209_Init(void)
 
     /* 再发一次，兼容上电时序偏慢的板子 */
     delay_cycles(160000u); /* ~2 ms */
-    (void)TMC2209_SetMicrosteps(16u);
+    (void)TMC2209_SetMicrosteps(STEPPER_MICROSTEPS);
     (void)TMC2209_SetCurrentCodes(
         current_code_from_ma(TMC2209_IHOLD_MA),
         current_code_from_ma(TMC2209_IRUN_MA));

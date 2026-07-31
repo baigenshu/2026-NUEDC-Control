@@ -1,6 +1,6 @@
 /**
  * @file ball_ctrl_cfg.h
- * @brief Single-loop visual position controller configuration.
+ * @brief Visual ball-position PID configuration.
  */
 #ifndef BALL_CTRL_CFG_H
 #define BALL_CTRL_CFG_H
@@ -11,74 +11,93 @@
 #ifndef BALL_CTRL_DEFAULT_FRAME_DT_MS
 #define BALL_CTRL_DEFAULT_FRAME_DT_MS (40u)
 #endif
-#ifndef BALL_CTRL_POS_ALPHA
-#define BALL_CTRL_POS_ALPHA (0.45f)
+#ifndef BALL_CTRL_FRAME_DT_MIN_MS
+#define BALL_CTRL_FRAME_DT_MIN_MS (20u)
 #endif
-#ifndef BALL_CTRL_VEL_ALPHA
-#define BALL_CTRL_VEL_ALPHA (0.20f)
-#endif
-#ifndef BALL_CTRL_VEL_LIMIT_MM_S
-#define BALL_CTRL_VEL_LIMIT_MM_S (220.0f)
-#endif
-#ifndef BALL_CTRL_DYNAMIC_CENTER_LEAD_S
-#define BALL_CTRL_DYNAMIC_CENTER_LEAD_S (0.04f)
-#endif
-#ifndef BALL_CTRL_DYNAMIC_CENTER_MAX_MM
-#define BALL_CTRL_DYNAMIC_CENTER_MAX_MM (4.0f)
+#ifndef BALL_CTRL_FRAME_DT_MAX_MS
+#define BALL_CTRL_FRAME_DT_MAX_MS (100u)
 #endif
 
-/* Pure visual position PID. The camera position is the only feedback. */
-#ifndef BALL_CTRL_PID_KP
-#define BALL_CTRL_PID_KP (0.0045f)
+/* Constant-velocity alpha-beta observer. */
+#ifndef BALL_CTRL_OBSERVER_ALPHA
+#define BALL_CTRL_OBSERVER_ALPHA (0.55f)
 #endif
-#ifndef BALL_CTRL_PID_KI
-#define BALL_CTRL_PID_KI (0.0009f)
+#ifndef BALL_CTRL_OBSERVER_BETA
+#define BALL_CTRL_OBSERVER_BETA (0.08f)
 #endif
-#ifndef BALL_CTRL_PID_KD
-#define BALL_CTRL_PID_KD (0.008f)
+#ifndef BALL_CTRL_OBSERVER_INNOVATION_MAX_MM
+#define BALL_CTRL_OBSERVER_INNOVATION_MAX_MM (35.0f)
 #endif
-#ifndef BALL_CTRL_PID_NEAR_ERR_MM
-#define BALL_CTRL_PID_NEAR_ERR_MM (20.0f)
+#ifndef BALL_CTRL_VEL_LIMIT_MM_S
+#define BALL_CTRL_VEL_LIMIT_MM_S (300.0f)
+#endif
+
+/*
+ * Position PID with derivative on measurement. Far gains accelerate the ball;
+ * near gains reduce proportional action and add damping before target crossing.
+ * Output is the abstract boom-tilt unit consumed by Stepper_SetTargetMm_x100().
+ */
+#ifndef BALL_CTRL_PID_FAR_KP
+#define BALL_CTRL_PID_FAR_KP (0.0035f)
+#endif
+#ifndef BALL_CTRL_PID_FAR_KD
+#define BALL_CTRL_PID_FAR_KD (0.0090f)
 #endif
 #ifndef BALL_CTRL_PID_NEAR_KP
-#define BALL_CTRL_PID_NEAR_KP (0.0045f)
+#define BALL_CTRL_PID_NEAR_KP (0.0025f)
 #endif
-#ifndef BALL_CTRL_PID_NEAR_KI
-#define BALL_CTRL_PID_NEAR_KI (0.0010f)
+#ifndef BALL_CTRL_PID_NEAR_KD
+#define BALL_CTRL_PID_NEAR_KD (0.0140f)
 #endif
-#ifndef BALL_CTRL_PID_INTEGRAL_MAX
-#define BALL_CTRL_PID_INTEGRAL_MAX (0.16f)
+#ifndef BALL_CTRL_PID_NEAR_ZONE_MM
+#define BALL_CTRL_PID_NEAR_ZONE_MM (40.0f)
 #endif
-#ifndef BALL_CTRL_PID_INTEGRAL_MAX_ERR_MM
-#define BALL_CTRL_PID_INTEGRAL_MAX_ERR_MM (70.0f)
+#ifndef BALL_CTRL_PID_KI
+#define BALL_CTRL_PID_KI (0.0010f)
 #endif
-#ifndef BALL_CTRL_PID_INTEGRAL_MAX_VEL_MM_S
-#define BALL_CTRL_PID_INTEGRAL_MAX_VEL_MM_S (8.0f)
+#ifndef BALL_CTRL_PID_INTEGRAL_OUTPUT_MAX
+#define BALL_CTRL_PID_INTEGRAL_OUTPUT_MAX (0.08f)
+#endif
+#ifndef BALL_CTRL_PID_INTEGRAL_ZONE_MM
+#define BALL_CTRL_PID_INTEGRAL_ZONE_MM (35.0f)
+#endif
+#ifndef BALL_CTRL_PID_INTEGRAL_VEL_MAX_MM_S
+#define BALL_CTRL_PID_INTEGRAL_VEL_MAX_MM_S (25.0f)
+#endif
+#ifndef BALL_CTRL_PID_INTEGRAL_LEAK_PER_S
+#define BALL_CTRL_PID_INTEGRAL_LEAK_PER_S (0.8f)
+#endif
+#ifndef BALL_CTRL_PID_CROSSING_I_RETAIN
+#define BALL_CTRL_PID_CROSSING_I_RETAIN (0.20f)
 #endif
 #ifndef BALL_CTRL_PID_DEADBAND_MM
-#define BALL_CTRL_PID_DEADBAND_MM (1.0f)
+#define BALL_CTRL_PID_DEADBAND_MM (0.8f)
 #endif
+#ifndef BALL_CTRL_PID_DEADBAND_VEL_MM_S
+#define BALL_CTRL_PID_DEADBAND_VEL_MM_S (4.0f)
+#endif
+
 #ifndef BALL_CTRL_OUTPUT_MAX_MM_X100
-#define BALL_CTRL_OUTPUT_MAX_MM_X100 (46)
+#define BALL_CTRL_OUTPUT_MAX_MM_X100 (24)
 #endif
-#ifndef BALL_CTRL_COMMAND_SLEW_MM_X100
-#define BALL_CTRL_COMMAND_SLEW_MM_X100 (6)
+#ifndef BALL_CTRL_COMMAND_RATE_UNIT_S
+#define BALL_CTRL_COMMAND_RATE_UNIT_S (1.5f)
 #endif
 #ifndef BALL_CTRL_COMMAND_EPS_MM_X100
 #define BALL_CTRL_COMMAND_EPS_MM_X100 (1)
 #endif
 
 #ifndef BALL_CTRL_SETTLED_ERR_MM
-#define BALL_CTRL_SETTLED_ERR_MM (4.0f)
+#define BALL_CTRL_SETTLED_ERR_MM (3.0f)
 #endif
 #ifndef BALL_CTRL_SETTLED_VEL_MM_S
-#define BALL_CTRL_SETTLED_VEL_MM_S (4.0f)
+#define BALL_CTRL_SETTLED_VEL_MM_S (5.0f)
 #endif
 #ifndef BALL_CTRL_SETTLED_CONFIRM_FRAMES
-#define BALL_CTRL_SETTLED_CONFIRM_FRAMES (5u)
+#define BALL_CTRL_SETTLED_CONFIRM_FRAMES (10u)
 #endif
 #ifndef BALL_CTRL_SETTLED_EXIT_ERR_MM
-#define BALL_CTRL_SETTLED_EXIT_ERR_MM (10.0f)
+#define BALL_CTRL_SETTLED_EXIT_ERR_MM (7.0f)
 #endif
 #ifndef BALL_CTRL_SETTLED_EXIT_VEL_MM_S
 #define BALL_CTRL_SETTLED_EXIT_VEL_MM_S (12.0f)
@@ -105,10 +124,10 @@
 #endif
 
 #ifndef BALL_CTRL_STEPPER_SPS
-#define BALL_CTRL_STEPPER_SPS (1800u)
+#define BALL_CTRL_STEPPER_SPS (3500u)
 #endif
 #ifndef BALL_CTRL_STEPPER_ACCEL
-#define BALL_CTRL_STEPPER_ACCEL (8000u)
+#define BALL_CTRL_STEPPER_ACCEL (40000u)
 #endif
 
 #ifndef BALL_CTRL_SIGN

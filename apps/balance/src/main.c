@@ -1,9 +1,9 @@
 /**
  * @file main.c
- * @brief balance：视觉球位闭环停球（静止定点 · 初步要求）
+ * @brief balance：视觉球位闭环停球
  *
  * 结构：合页 + 凹槽摆杆 + 曲柄连杆
- * 链路：MaixCAM type=0x02 → UART0 → 位置 PD → 曲柄倾角 → 钢珠位置
+ * 链路：MaixCAM type=0x02 → UART0 → 位置 PID → 曲柄倾角 → 钢珠位置
  * 定点默认 O；type=0x12 或 BallCtrl_SetTarget* 可改任意位置
  */
 #include "ti_msp_dl_config.h"
