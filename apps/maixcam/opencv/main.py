@@ -74,7 +74,7 @@ WIFI_CONNECT_TIMEOUT = 60
 ENABLE_MJPEG = True
 HTTP_PORT = 8000
 JPEG_QUALITY = 45
-MJPEG_EVERY_N = 1         # 每 N 帧编码一次；2 可减负
+MJPEG_EVERY_N = 2         # 每 N 帧编码一次；2 可减负
 
 _mjpeg_lock = threading.Lock()
 _mjpeg_jpeg = None
