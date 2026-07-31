@@ -10,7 +10,7 @@
  *   L1  SPD:+xxxx
  *   L2  IR:xxxx E:±xx
  *   L3  A:+xxx B:+xxx
- *   L4  TRK / OFF Gx
+ *   L4  TRK / OFF Gx  T:xxx.xx   (RUN 键计时)
  */
 #include "ti_msp_dl_config.h"
 #include "motor.h"
@@ -53,6 +53,12 @@ static int16_t s_spd;
 static uint8_t s_gear_idx;
 static uint8_t s_ui_dirty;
 
+/* RUN 键计时器：按下启动计时 / 再按停止并显示 / 再启动清零重计 */
+static uint8_t  s_timer_running;     /* 0=停止(显示冻结用时), 1=计时中 */
+static uint32_t s_timer_start_ms;    /* 启动时刻 (ms) */
+static uint32_t s_timer_elapsed_ms;  /* 停止时冻结的用时 (ms) */
+static uint32_t s_timer_display_ms;  /* 当前显示用 (ms) */
+
 static void timebase_init(void)
 {
     s_ms = 0;
@@ -79,11 +85,26 @@ static uint32_t millis(void)
     return s_ms;
 }
 
-static void on_key_run(void)
+static void on_key_run(uint32_t now)
 {
     bool on = !LineFollow_IsEnabled();
     LineFollow_SetBaseSpd(s_spd);
     LineFollow_SetEnable(on);
+
+    if (on) {
+        /* 启动：清零并开始计时 */
+        s_timer_running    = 1u;
+        s_timer_start_ms   = now;
+        s_timer_elapsed_ms = 0u;
+    } else {
+        /* 停止：冻结用时并打印 */
+        s_timer_running    = 0u;
+        s_timer_elapsed_ms = now - s_timer_start_ms;
+        UartDebug_Printf("LAP %lu.%02lu s\n",
+                         (unsigned long)(s_timer_elapsed_ms / 1000u),
+                         (unsigned long)((s_timer_elapsed_ms % 1000u) / 10u));
+    }
+
     UartDebug_Printf("KEY_RUN -> %s spd=%d\n", on ? "ON" : "OFF", (int)s_spd);
     s_ui_dirty = 1u;
 }
@@ -158,6 +179,18 @@ static void ui_refresh(void)
 
     OLED_ShowString(4, 1, state_text(LineFollow_GetState()));
     OLED_ShowNum(4, 7, (uint32_t)s_gear_idx, 1);
+
+    /* L4 末尾：计时 T:xxx.xx (s) */
+    {
+        uint32_t sec = s_timer_display_ms / 1000u;
+        uint32_t cs  = (s_timer_display_ms % 1000u) / 10u;
+        if (sec > 999u) sec = 999u;          /* 限幅 999.99 s */
+        OLED_ShowChar(4, 9,  'T');
+        OLED_ShowChar(4, 10, ':');
+        OLED_ShowNum (4, 11, sec, 3);
+        OLED_ShowChar(4, 14, '.');
+        OLED_ShowNum (4, 15, cs, 2);
+    }
 }
 
 int main(void)
@@ -198,7 +231,7 @@ int main(void)
         now = millis();
 
         if (Key_PollPress(KEY_ID_RUN, now))
-            on_key_run();
+            on_key_run(now);
         if (Key_PollPress(KEY_ID_SPD, now))
             on_key_spd();
 
@@ -211,6 +244,8 @@ int main(void)
         if (s_ui_dirty || (now - t_oled) >= OLED_REFRESH_MS) {
             t_oled = now;
             s_ui_dirty = 0;
+            s_timer_display_ms = s_timer_running
+                ? (now - s_timer_start_ms) : s_timer_elapsed_ms;
             ui_refresh();
         }
 
