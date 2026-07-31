@@ -43,6 +43,11 @@ static volatile uint32_t  s_lost_ms;
 static uint8_t            s_bad_frames;
 static bool               s_rod_applied;
 static bool               s_coils_off;
+static bool               s_calibration_pending;
+static int16_t            s_calibration_samples[BALL_CTRL_CALIBRATION_FRAMES];
+static uint8_t            s_calibration_head;
+static uint8_t            s_calibration_count;
+static float              s_position_offset_mm;
 
 static int32_t clamp_i32(int32_t value, int32_t lower, int32_t upper)
 {
@@ -108,6 +113,57 @@ static void reset_dynamic_state(void)
     s_have_ball = false;
     s_last_frame_ms = 0u;
     s_bad_frames = 0u;
+}
+
+static void reset_calibration_samples(void)
+{
+    s_calibration_head = 0u;
+    s_calibration_count = 0u;
+}
+
+static void record_calibration_sample(const ball_frame_t *frame)
+{
+    s_calibration_samples[s_calibration_head] = frame->pos_mm;
+    s_calibration_head++;
+    if (s_calibration_head >= (uint8_t)BALL_CTRL_CALIBRATION_FRAMES)
+        s_calibration_head = 0u;
+    if (s_calibration_count < (uint8_t)BALL_CTRL_CALIBRATION_FRAMES)
+        s_calibration_count++;
+}
+
+static bool try_calibrated_start(void)
+{
+    int32_t sum = 0;
+    int16_t minimum;
+    int16_t maximum;
+    uint8_t index;
+
+    if (!s_calibration_pending ||
+        s_calibration_count < (uint8_t)BALL_CTRL_CALIBRATION_FRAMES ||
+        !VisionUart_BallLinkOk())
+        return false;
+
+    minimum = s_calibration_samples[0];
+    maximum = minimum;
+    for (index = 0u; index < (uint8_t)BALL_CTRL_CALIBRATION_FRAMES; index++) {
+        int16_t sample = s_calibration_samples[index];
+        sum += sample;
+        if (sample < minimum)
+            minimum = sample;
+        if (sample > maximum)
+            maximum = sample;
+    }
+    if ((int32_t)maximum - (int32_t)minimum >
+        (int32_t)BALL_CTRL_CALIBRATION_MAX_SPREAD_MM)
+        return false;
+
+    s_position_offset_mm =
+        (float)sum / (float)BALL_CTRL_CALIBRATION_FRAMES -
+        (float)s_target_mm_x100 / 100.0f;
+    s_calibration_pending = false;
+    Stepper_SetZero();
+    BallCtrl_Enable(true);
+    return true;
 }
 
 static void coils_on(void)
@@ -192,7 +248,8 @@ static void update_measurement(const ball_frame_t *frame, float *dt_s)
     float innovation_mm;
     uint32_t frame_dt_ms;
 
-    raw_mm = (float)ball_pos_to_mm_x100(frame->pos_mm) / 100.0f;
+    raw_mm = (float)ball_pos_to_mm_x100(frame->pos_mm) / 100.0f -
+        s_position_offset_mm;
     *dt_s = (float)BALL_CTRL_DEFAULT_FRAME_DT_MS / 1000.0f;
 
     if (!s_have_ball) {
@@ -327,9 +384,12 @@ void BallCtrl_Init(void)
     s_command = 0.0f;
     s_rod_applied = false;
     s_coils_off = true;
+    s_calibration_pending = false;
+    s_position_offset_mm = 0.0f;
     g_ball_ctrl_trace_head = 0u;
     g_ball_ctrl_trace_count = 0u;
     reset_dynamic_state();
+    reset_calibration_samples();
 
     Stepper_SetSpeedSps(BALL_CTRL_STEPPER_SPS);
     Stepper_SetAccel(BALL_CTRL_STEPPER_ACCEL);
@@ -353,7 +413,9 @@ void BallCtrl_Enable(bool on)
         s_state = BALL_CTRL_STATE_IDLE;
         s_rod_mm_x100 = 0;
         s_rod_applied = false;
+        s_calibration_pending = false;
         reset_dynamic_state();
+        reset_calibration_samples();
         coils_off();
     }
 }
@@ -361,6 +423,15 @@ void BallCtrl_Enable(bool on)
 bool BallCtrl_IsEnabled(void)
 {
     return s_en;
+}
+
+void BallCtrl_RequestCalibratedStart(void)
+{
+    if (s_en)
+        return;
+
+    reset_calibration_samples();
+    s_calibration_pending = true;
 }
 
 void BallCtrl_SetTargetMm_x100(int32_t mm_x100)
@@ -410,6 +481,10 @@ void BallCtrl_Update(void)
 
     if (!s_en) {
         s_state = BALL_CTRL_STATE_IDLE;
+        if (VisionUart_TakeBallFrame(&frame) && ball_frame_usable(&frame)) {
+            record_calibration_sample(&frame);
+            (void)try_calibrated_start();
+        }
         return;
     }
 
@@ -457,6 +532,14 @@ int32_t BallCtrl_GetBallMm_x100(void)
 int32_t BallCtrl_GetRodMm_x100(void)
 {
     return s_rod_mm_x100;
+}
+
+int32_t BallCtrl_GetPositionOffsetMm_x100(void)
+{
+    float offset_x100 = s_position_offset_mm * 100.0f;
+
+    return (int32_t)(offset_x100 >= 0.0f ?
+        offset_x100 + 0.5f : offset_x100 - 0.5f);
 }
 
 bool BallCtrl_IsSettled(void)

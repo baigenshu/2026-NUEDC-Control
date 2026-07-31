@@ -9,6 +9,7 @@
 
 const GPIO    = scripting.addModule("/ti/driverlib/GPIO", {}, false);
 const GPIO1   = GPIO.addInstance();
+const GPIO2   = GPIO.addInstance();
 const SYSCTL  = scripting.addModule("/ti/driverlib/SYSCTL");
 const SYSTICK = scripting.addModule("/ti/driverlib/SYSTICK");
 const TIMER   = scripting.addModule("/ti/driverlib/TIMER", {}, false);
@@ -46,6 +47,16 @@ GPIO1.associatedPins[2].$name        = "STEP";
 GPIO1.associatedPins[2].assignedPin  = "12";
 GPIO1.associatedPins[2].pin.$assign  = "PA12";
 GPIO1.associatedPins[2].initialValue = "CLEARED";
+
+/* 人工调平后按下 PB8：当前位置作为水平零点并启动闭环 */
+GPIO2.$name                              = "GPIO_BALANCE_KEY";
+GPIO2.port                               = "PORTB";
+GPIO2.associatedPins.create(1);
+GPIO2.associatedPins[0].$name            = "START";
+GPIO2.associatedPins[0].direction        = "INPUT";
+GPIO2.associatedPins[0].internalResistor = "PULL_UP";
+GPIO2.associatedPins[0].assignedPin      = "8";
+GPIO2.associatedPins[0].pin.$assign      = "PB8";
 
 TIMER1.$name              = "STEP_TIM";
 TIMER1.timerMode          = "PERIODIC";

@@ -27,6 +27,9 @@ void BallCtrl_OnMsTick(void);
 void BallCtrl_Enable(bool on);
 bool BallCtrl_IsEnabled(void);
 
+/** 用待机时最近的稳定球位校准视觉零偏，然后将当前电机位置置零并启动 */
+void BallCtrl_RequestCalibratedStart(void);
+
 /** 停球目标，单位 0.01 mm（相对视觉 O） */
 void    BallCtrl_SetTargetMm_x100(int32_t mm_x100);
 int32_t BallCtrl_GetTargetMm_x100(void);
@@ -40,6 +43,7 @@ void BallCtrl_Update(void);
 ball_ctrl_state_t BallCtrl_GetState(void);
 int32_t BallCtrl_GetBallMm_x100(void);     /* 滤波后球位 */
 int32_t BallCtrl_GetRodMm_x100(void);      /* 当前开环执行命令，不是反馈 */
+int32_t BallCtrl_GetPositionOffsetMm_x100(void);
 bool    BallCtrl_IsSettled(void);
 
 #endif /* BALL_CTRL_H */

@@ -1,6 +1,6 @@
 /**
  * @file vision_uart.c
- * @brief VISION_UART (UART0) 收包状态机：球位 0x02 + 定点 0x12
+ * @brief VISION_UART (UART0) 收包状态机：球位 0x02、定点 0x12、启停 0x13
  */
 #include "vision_uart.h"
 #include "ti_msp_dl_config.h"
@@ -24,23 +24,28 @@ static ball_frame_t        s_ball;
 static volatile bool       s_ball_new;
 static ball_setpoint_cmd_t s_sp;
 static volatile bool       s_sp_new;
+static ball_control_cmd_t  s_control;
+static volatile bool       s_control_new;
+
+static bool frame_checksum_ok(const uint8_t *raw)
+{
+    uint8_t sum = 0u;
+    unsigned i;
+
+    if (!raw || raw[0] != BALL_FRAME_MAGIC0 || raw[1] != BALL_FRAME_MAGIC1)
+        return false;
+    for (i = BALL_FRAME_BODY_OFF; i < BALL_FRAME_CSUM_OFF; i++)
+        sum = (uint8_t)(sum + raw[i]);
+    return sum == raw[BALL_FRAME_CSUM_OFF];
+}
 
 static bool parse_setpoint(const uint8_t *raw, ball_setpoint_cmd_t *out)
 {
-    uint8_t sum;
-    unsigned i;
-
     if (!raw || !out)
-        return false;
-    if (raw[0] != BALL_FRAME_MAGIC0 || raw[1] != BALL_FRAME_MAGIC1)
         return false;
     if (raw[2] != BALL_CMD_TYPE_SETPOINT)
         return false;
-
-    sum = 0;
-    for (i = BALL_FRAME_BODY_OFF; i < BALL_FRAME_CSUM_OFF; i++)
-        sum = (uint8_t)(sum + raw[i]);
-    if (sum != raw[BALL_FRAME_CSUM_OFF])
+    if (!frame_checksum_ok(raw))
         return false;
 
     /* body: type flags target_mm i16 + pad… — 单位整 mm */
@@ -50,10 +55,23 @@ static bool parse_setpoint(const uint8_t *raw, ball_setpoint_cmd_t *out)
     return true;
 }
 
+static bool parse_control(const uint8_t *raw, ball_control_cmd_t *out)
+{
+    if (!raw || !out || raw[2] != BALL_FRAME_TYPE_CONTROL)
+        return false;
+    if (!frame_checksum_ok(raw) || raw[3] > 1u)
+        return false;
+
+    out->start = raw[3] == 1u;
+    out->valid = true;
+    return true;
+}
+
 static void deliver_frame(void)
 {
     ball_frame_t f;
     ball_setpoint_cmd_t sp;
+    ball_control_cmd_t control;
 
     if (s_buf[2] == BALL_FRAME_TYPE) {
         if (ball_frame_parse(s_buf, &f)) {
@@ -72,6 +90,17 @@ static void deliver_frame(void)
         if (parse_setpoint(s_buf, &sp)) {
             s_sp = sp;
             s_sp_new = true;
+        } else {
+            s_drop_cnt++;
+        }
+        return;
+    }
+
+    if (s_buf[2] == BALL_FRAME_TYPE_CONTROL) {
+        control.valid = false;
+        if (parse_control(s_buf, &control)) {
+            s_control = control;
+            s_control_new = true;
         } else {
             s_drop_cnt++;
         }
@@ -134,8 +163,10 @@ void VisionUart_Init(void)
     s_n = 0;
     s_ball_new = false;
     s_sp_new = false;
+    s_control_new = false;
     s_ball.valid = false;
     s_sp.valid = false;
+    s_control.valid = false;
 
     /* UART 已在 SYSCFG_DL_VISION_UART_init 中使能 */
     NVIC_EnableIRQ(VISION_UART_INST_INT_IRQN);
@@ -170,6 +201,15 @@ bool VisionUart_TakeSetpoint(ball_setpoint_cmd_t *out)
         return false;
     *out = s_sp;
     s_sp_new = false;
+    return true;
+}
+
+bool VisionUart_TakeControl(ball_control_cmd_t *out)
+{
+    if (!out || !s_control_new)
+        return false;
+    *out = s_control;
+    s_control_new = false;
     return true;
 }
 

@@ -1,6 +1,6 @@
 /**
  * @file vision_uart.h
- * @brief 视觉 UART 收包：球位 type=0x02 + 定点 type=0x12
+ * @brief 视觉 UART 收包：球位 0x02、定点 0x12、启停 0x13
  */
 #ifndef VISION_UART_H
 #define VISION_UART_H
@@ -19,6 +19,11 @@ typedef struct {
     int16_t target_mm; /* 整 mm，相对 O */
 } ball_setpoint_cmd_t;
 
+typedef struct {
+    bool    valid;
+    bool    start; /* true：校零启动；false：停止并释放电机 */
+} ball_control_cmd_t;
+
 void VisionUart_Init(void);
 
 /** 主循环调用：抽 RX FIFO → 状态机；有完整帧则缓存 */
@@ -29,6 +34,7 @@ void VisionUart_OnMsTick(void);
 
 bool VisionUart_TakeBallFrame(ball_frame_t *out);
 bool VisionUart_TakeSetpoint(ball_setpoint_cmd_t *out);
+bool VisionUart_TakeControl(ball_control_cmd_t *out);
 
 /** 距上一帧有效球位的 ms；无帧过则为较大值 */
 uint32_t VisionUart_MsSinceBall(void);

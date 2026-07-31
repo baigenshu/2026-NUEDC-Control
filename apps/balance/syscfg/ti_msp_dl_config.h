@@ -135,6 +135,12 @@ extern "C" {
 /* Defines for STEP: GPIOA.12 with pinCMx 34 on package pin 5 */
 #define GPIO_STEPPER_STEP_PIN                                   (DL_GPIO_PIN_12)
 #define GPIO_STEPPER_STEP_IOMUX                                  (IOMUX_PINCM34)
+/* Port definition for Pin Group GPIO_BALANCE_KEY */
+#define GPIO_BALANCE_KEY_PORT                                            (GPIOB)
+
+/* Defines for START: GPIOB.8 with pinCMx 25 on package pin 60 */
+#define GPIO_BALANCE_KEY_START_PIN                               (DL_GPIO_PIN_8)
+#define GPIO_BALANCE_KEY_START_IOMUX                             (IOMUX_PINCM25)
 
 
 
