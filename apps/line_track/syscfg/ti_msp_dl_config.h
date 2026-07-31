@@ -170,9 +170,25 @@ extern "C" {
 /* Defines for RUN: GPIOA.17 with pinCMx 39 on package pin 10 */
 #define GPIO_KEY_RUN_PIN                                        (DL_GPIO_PIN_17)
 #define GPIO_KEY_RUN_IOMUX                                       (IOMUX_PINCM39)
-/* Defines for SPD: GPIOA.18 with pinCMx 40 on package pin 11 */
-#define GPIO_KEY_SPD_PIN                                        (DL_GPIO_PIN_18)
-#define GPIO_KEY_SPD_IOMUX                                       (IOMUX_PINCM40)
+/* Defines for SPD: GPIOA.15 with pinCMx 37 on package pin 8 */
+#define GPIO_KEY_SPD_PIN                                        (DL_GPIO_PIN_15)
+#define GPIO_KEY_SPD_IOMUX                                       (IOMUX_PINCM37)
+/* Defines for P1: GPIOB.19 with pinCMx 45 on package pin 16 */
+#define GPIO_IR_P1_PORT                                                  (GPIOB)
+#define GPIO_IR_P1_PIN                                          (DL_GPIO_PIN_19)
+#define GPIO_IR_P1_IOMUX                                         (IOMUX_PINCM45)
+/* Defines for P2: GPIOB.17 with pinCMx 43 on package pin 14 */
+#define GPIO_IR_P2_PORT                                                  (GPIOB)
+#define GPIO_IR_P2_PIN                                          (DL_GPIO_PIN_17)
+#define GPIO_IR_P2_IOMUX                                         (IOMUX_PINCM43)
+/* Defines for P3: GPIOA.16 with pinCMx 38 on package pin 9 */
+#define GPIO_IR_P3_PORT                                                  (GPIOA)
+#define GPIO_IR_P3_PIN                                          (DL_GPIO_PIN_16)
+#define GPIO_IR_P3_IOMUX                                         (IOMUX_PINCM38)
+/* Defines for P4: GPIOA.14 with pinCMx 36 on package pin 7 */
+#define GPIO_IR_P4_PORT                                                  (GPIOA)
+#define GPIO_IR_P4_PIN                                          (DL_GPIO_PIN_14)
+#define GPIO_IR_P4_IOMUX                                         (IOMUX_PINCM36)
 /* Port definition for Pin Group GPIO_MOTOR */
 #define GPIO_MOTOR_PORT                                                  (GPIOB)
 

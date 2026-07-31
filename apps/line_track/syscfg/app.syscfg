@@ -13,6 +13,7 @@ const GPIO4   = GPIO.addInstance();
 const GPIO5   = GPIO.addInstance();
 const GPIO6   = GPIO.addInstance();
 const GPIO7   = GPIO.addInstance();
+const GPIO8   = GPIO.addInstance();
 const PWM     = scripting.addModule("/ti/driverlib/PWM", {}, false);
 const PWM1    = PWM.addInstance();
 const PWM2    = PWM.addInstance();
@@ -66,8 +67,35 @@ GPIO7.associatedPins[0].pin.$assign      = "PA17";
 GPIO7.associatedPins[1].$name            = "SPD";
 GPIO7.associatedPins[1].direction        = "INPUT";
 GPIO7.associatedPins[1].internalResistor = "PULL_UP";
-GPIO7.associatedPins[1].assignedPin      = "18";
-GPIO7.associatedPins[1].pin.$assign      = "PA18";
+GPIO7.associatedPins[1].assignedPin      = "15";
+GPIO7.associatedPins[1].pin.$assign      = "PA15";
+
+/*
+ * 四路红外循迹 p1..p4 = G1/G2/G3/G4
+ * 左→右：PB19, PB17, PA16, PA14；上拉，黑线=高
+ */
+GPIO8.$name                              = "GPIO_IR";
+GPIO8.associatedPins.create(4);
+GPIO8.associatedPins[0].$name            = "P1";
+GPIO8.associatedPins[0].direction        = "INPUT";
+GPIO8.associatedPins[0].assignedPort     = "PORTB";
+GPIO8.associatedPins[0].assignedPin      = "19";
+GPIO8.associatedPins[0].internalResistor = "PULL_UP";
+GPIO8.associatedPins[1].$name            = "P2";
+GPIO8.associatedPins[1].direction        = "INPUT";
+GPIO8.associatedPins[1].assignedPort     = "PORTB";
+GPIO8.associatedPins[1].assignedPin      = "17";
+GPIO8.associatedPins[1].internalResistor = "PULL_UP";
+GPIO8.associatedPins[2].$name            = "P3";
+GPIO8.associatedPins[2].direction        = "INPUT";
+GPIO8.associatedPins[2].assignedPort     = "PORTA";
+GPIO8.associatedPins[2].assignedPin      = "16";
+GPIO8.associatedPins[2].internalResistor = "PULL_UP";
+GPIO8.associatedPins[3].$name            = "P4";
+GPIO8.associatedPins[3].direction        = "INPUT";
+GPIO8.associatedPins[3].assignedPort     = "PORTA";
+GPIO8.associatedPins[3].assignedPin      = "14";
+GPIO8.associatedPins[3].internalResistor = "PULL_UP";
 
 /* TB6612 方向 + STBY */
 GPIO1.$name                          = "GPIO_MOTOR";
@@ -261,7 +289,11 @@ GPIO6.associatedPins[0].pin.$suggestSolution = "PB14";
 GPIO6.associatedPins[1].pin.$suggestSolution = "PB11";
 GPIO6.associatedPins[2].pin.$suggestSolution = "PB10";
 GPIO7.associatedPins[0].pin.$suggestSolution = "PA17";
-GPIO7.associatedPins[1].pin.$suggestSolution = "PA18";
+GPIO7.associatedPins[1].pin.$suggestSolution = "PA15";
+GPIO8.associatedPins[0].pin.$suggestSolution = "PB19";
+GPIO8.associatedPins[1].pin.$suggestSolution = "PB17";
+GPIO8.associatedPins[2].pin.$suggestSolution = "PA16";
+GPIO8.associatedPins[3].pin.$suggestSolution = "PA14";
 GPIO2.associatedPins[0].pin.$suggestSolution = "PB0";
 GPIO2.associatedPins[1].pin.$suggestSolution = "PB5";
 GPIO3.associatedPins[1].pin.$suggestSolution = "PB18";

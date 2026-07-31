@@ -1,22 +1,25 @@
 /**
  * @file main.c
- * @brief 四路电机开环 + 编码器 + OLED + 双按键
+ * @brief 四路红外巡线 · 四轮独立速度 PID 闭环
  *
- * KEY_RUN PA17：电机开/关（低有效）
- * KEY_SPD PA18：档位 0→1000→2000→3000→0（低有效）
- * DEBUG UART0 PA10/PA11 115200：1 s 心跳
+ * KEY_RUN PA17：巡线开/关
+ * KEY_SPD PA15：base speed 0→SPD1→SPD2→SPD3→0
+ * IR p1..p4 = PB19/PB17/PA16/PA14（G1–G4）
  *
  * OLED：
- *   L1  PWM:+xxxx
- *   L2  A:+xxx B:+xxx
- *   L3  C:+xxx D:+xxx
- *   L4  ON  G2 / OFF G0
+ *   L1  SPD:+xxxx
+ *   L2  IR:xxxx E:±xx
+ *   L3  A:+xxx B:+xxx
+ *   L4  TRK / OFF Gx
  */
 #include "ti_msp_dl_config.h"
 #include "motor.h"
 #include "motor_cfg.h"
 #include "encoder.h"
 #include "key.h"
+#include "ir4.h"
+#include "line_follow.h"
+#include "line_follow_cfg.h"
 #include "OLED.h"
 #include "uart_debug.h"
 #include <stdbool.h>
@@ -26,7 +29,7 @@
 #endif
 
 #ifndef SAMPLE_MS
-#define SAMPLE_MS 20u
+#define SAMPLE_MS 10u
 #endif
 
 #ifndef OLED_REFRESH_MS
@@ -37,8 +40,8 @@
 #define HB_PERIOD_MS 1000u
 #endif
 
-static const int16_t s_gears[PWM_GEAR_COUNT] = {
-    PWM_GEAR_0, PWM_GEAR_1, PWM_GEAR_2, PWM_GEAR_3,
+static const int16_t s_gears[SPD_GEAR_COUNT] = {
+    SPD_GEAR_0, SPD_GEAR_1, SPD_GEAR_2, SPD_GEAR_3,
 };
 
 static uint32_t s_ms;
@@ -46,9 +49,9 @@ static uint32_t s_last_systick;
 static uint32_t s_cycle_accum;
 
 static int32_t s_ea, s_eb, s_ec, s_ed;
-static int16_t s_pwm;
+static int16_t s_spd;
 static uint8_t s_gear_idx;
-static bool s_motor_on;
+static uint8_t s_ui_dirty;
 
 static void timebase_init(void)
 {
@@ -76,30 +79,22 @@ static uint32_t millis(void)
     return s_ms;
 }
 
-static void apply_motor_output(void)
-{
-    if (s_motor_on) {
-        Motor_SetEnable(true);
-        Motor_SetAll((int16_t)(s_pwm * POL_A), (int16_t)(s_pwm * POL_B),
-                     (int16_t)(s_pwm * POL_C), (int16_t)(s_pwm * POL_D));
-    } else {
-        Motor_StopAll(MOTOR_STOP_COAST);
-        Motor_SetEnable(false);
-    }
-}
-
 static void on_key_run(void)
 {
-    s_motor_on = !s_motor_on;
-    apply_motor_output();
+    bool on = !LineFollow_IsEnabled();
+    LineFollow_SetBaseSpd(s_spd);
+    LineFollow_SetEnable(on);
+    UartDebug_Printf("KEY_RUN -> %s spd=%d\n", on ? "ON" : "OFF", (int)s_spd);
+    s_ui_dirty = 1u;
 }
 
 static void on_key_spd(void)
 {
-    s_gear_idx = (uint8_t)((s_gear_idx + 1u) % PWM_GEAR_COUNT);
-    s_pwm = s_gears[s_gear_idx];
-    if (s_motor_on)
-        apply_motor_output();
+    s_gear_idx = (uint8_t)((s_gear_idx + 1u) % SPD_GEAR_COUNT);
+    s_spd = s_gears[s_gear_idx];
+    LineFollow_SetBaseSpd(s_spd);
+    UartDebug_Printf("KEY_SPD -> g=%u spd=%d\n", (unsigned)s_gear_idx, (int)s_spd);
+    s_ui_dirty = 1u;
 }
 
 static int32_t clamp_show(int32_t v, int32_t lim)
@@ -114,37 +109,54 @@ static int32_t clamp_show(int32_t v, int32_t lim)
 static void ui_draw_static(void)
 {
     OLED_Clear();
-    OLED_ShowString(1, 1, "PWM:");
-    OLED_ShowString(2, 1, "A:");
-    OLED_ShowString(2, 9, "B:");
-    OLED_ShowString(3, 1, "C:");
-    OLED_ShowString(3, 9, "D:");
+    OLED_ShowString(1, 1, "SPD:");
+    OLED_ShowString(2, 1, "IR:");
+    OLED_ShowString(2, 9, "E:");
+    OLED_ShowString(3, 1, "A:");
+    OLED_ShowString(3, 9, "B:");
+}
+
+static const char *state_text(lf_state_t st)
+{
+    return (st == LF_STATE_TRACK) ? "TRK G" : "OFF G";
 }
 
 static void ui_refresh(void)
 {
-    int32_t a = clamp_show(s_ea, 999);
-    int32_t b = clamp_show(s_eb, 999);
-    int32_t c = clamp_show(s_ec, 999);
-    int32_t d = clamp_show(s_ed, 999);
-    int32_t pwm = (int32_t)s_pwm;
+    uint8_t  mask = LineFollow_GetMask();
+    float    err_f = LineFollow_GetError();
+    int32_t  err;
+    int32_t  a = clamp_show(s_ea, 999);
+    int32_t  b = clamp_show(s_eb, 999);
+    int32_t  c = clamp_show(s_ec, 999);
+    int32_t  d = clamp_show(s_ed, 999);
+    int32_t  spd = (int32_t)s_spd;
+    char     bits[5];
+    uint8_t  i;
 
-    if (pwm > 9999)
-        pwm = 9999;
-    if (pwm < -9999)
-        pwm = -9999;
+    if (spd > 9999)  spd = 9999;
+    if (spd < -9999) spd = -9999;
 
-    OLED_ShowSignedNum(1, 5, pwm, 4);
+    if (err_f <= -90.f || err_f >= 90.f)
+        err = (int32_t)err_f;
+    else
+        err = (int32_t)(err_f * 10.f);
+    err = clamp_show(err, 99);
+
+    OLED_ShowSignedNum(1, 5, spd, 4);
 
     OLED_ShowSignedNum(2, 3, a, 3);
     OLED_ShowSignedNum(2, 11, b, 3);
     OLED_ShowSignedNum(3, 3, c, 3);
     OLED_ShowSignedNum(3, 11, d, 3);
 
-    if (s_motor_on)
-        OLED_ShowString(4, 1, "ON  G");
-    else
-        OLED_ShowString(4, 1, "OFF G");
+    for (i = 0; i < 4u; ++i)
+        bits[i] = (mask & (1u << i)) ? '1' : '0';
+    bits[4] = '\0';
+    OLED_ShowString(2, 4, bits);
+    OLED_ShowSignedNum(2, 11, err, 2);
+
+    OLED_ShowString(4, 1, state_text(LineFollow_GetState()));
     OLED_ShowNum(4, 7, (uint32_t)s_gear_idx, 1);
 }
 
@@ -154,12 +166,11 @@ int main(void)
     uint32_t t_oled;
     uint32_t t_hb;
     uint32_t now;
-    uint32_t dt;
     uint32_t hb_cnt;
 
-    s_gear_idx = 0;
-    s_pwm = s_gears[s_gear_idx];
-    s_motor_on = false;
+    s_gear_idx = 1;
+    s_spd = s_gears[s_gear_idx];
+    s_ui_dirty = 0;
     hb_cnt = 0;
 
     SYSCFG_DL_init();
@@ -170,37 +181,36 @@ int main(void)
     Motor_Init();
     Encoder_Init();
     Key_Init();
-    apply_motor_output();
+    LineFollow_Init();
+    LineFollow_SetBaseSpd(s_spd);
 
-    UartDebug_Puts("line_track boot\n");
-    UartDebug_Printf("UART0 %u 8N1 TX=PA10\n", (unsigned)DEBUG_UART_BAUD_RATE);
+    UartDebug_Puts("line_track SPD-CTRL boot\n");
+    UartDebug_Printf("RUN=PA17 SPD=PA15 init_spd=%d\n", (int)s_spd);
 
     ui_draw_static();
     ui_refresh();
 
     t_prev = millis();
     t_oled = t_prev;
-    t_hb = t_prev;
+    t_hb   = t_prev;
 
     for (;;) {
         now = millis();
-        dt = now - t_prev;
-        if (dt < SAMPLE_MS)
-            continue;
-        t_prev = now;
 
         if (Key_PollPress(KEY_ID_RUN, now))
             on_key_run();
         if (Key_PollPress(KEY_ID_SPD, now))
             on_key_spd();
 
-        if (s_motor_on)
-            apply_motor_output();
+        if ((now - t_prev) >= SAMPLE_MS) {
+            t_prev = now;
+            LineFollow_Update();
+            LineFollow_GetEncoderDeltas(&s_ea, &s_eb, &s_ec, &s_ed);
+        }
 
-        Encoder_ReadDeltaAll(&s_ea, &s_eb, &s_ec, &s_ed);
-
-        if ((now - t_oled) >= OLED_REFRESH_MS) {
+        if (s_ui_dirty || (now - t_oled) >= OLED_REFRESH_MS) {
             t_oled = now;
+            s_ui_dirty = 0;
             ui_refresh();
         }
 
@@ -208,9 +218,13 @@ int main(void)
             t_hb = now;
             hb_cnt++;
             UartDebug_Printf(
-                "HB #%lu t=%lums on=%d g=%u pwm=%d enc=%ld,%ld,%ld,%ld\n",
-                (unsigned long)hb_cnt, (unsigned long)now,
-                s_motor_on ? 1 : 0, (unsigned)s_gear_idx, (int)s_pwm,
+                "HB #%lu en=%d g=%u spd=%d m=%02X e=%.1f st=%d "
+                "enc=%ld,%ld,%ld,%ld\n",
+                (unsigned long)hb_cnt,
+                LineFollow_IsEnabled() ? 1 : 0, (unsigned)s_gear_idx,
+                (int)s_spd, (unsigned)LineFollow_GetMask(),
+                (double)LineFollow_GetError(),
+                (int)LineFollow_GetState(),
                 (long)s_ea, (long)s_eb, (long)s_ec, (long)s_ed);
         }
     }
