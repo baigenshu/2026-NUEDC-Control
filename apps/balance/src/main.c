@@ -32,7 +32,6 @@ int main(void)
     VisionUart_Init();
     BallCtrl_Init();
 
-    /* 默认停在视觉 O；赛题定点例如 +50.0 mm → SetTargetMm_x100(5000) */
     BallCtrl_SetTargetMm_x100(0);
     BallCtrl_Enable(true);
 

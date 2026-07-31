@@ -1,6 +1,6 @@
 /**
  * @file ball_ctrl_cfg.h
- * @brief 视觉球位 → 曲柄倾角 停球参数（1/16 微步 · 中心稳定迭代）
+ * @brief Single-loop visual position controller configuration.
  */
 #ifndef BALL_CTRL_CFG_H
 #define BALL_CTRL_CFG_H
@@ -8,126 +8,80 @@
 #ifndef BALL_CTRL_DEFAULT_TARGET_MM_X100
 #define BALL_CTRL_DEFAULT_TARGET_MM_X100 (0)
 #endif
-
 #ifndef BALL_CTRL_DEFAULT_FRAME_DT_MS
 #define BALL_CTRL_DEFAULT_FRAME_DT_MS (40u)
-#endif
-#ifndef BALL_CTRL_PREDICT_MS
-#define BALL_CTRL_PREDICT_MS (45u)
 #endif
 #ifndef BALL_CTRL_POS_ALPHA
 #define BALL_CTRL_POS_ALPHA (0.45f)
 #endif
 #ifndef BALL_CTRL_VEL_ALPHA
-#define BALL_CTRL_VEL_ALPHA (0.40f)
+#define BALL_CTRL_VEL_ALPHA (0.20f)
 #endif
 #ifndef BALL_CTRL_VEL_LIMIT_MM_S
 #define BALL_CTRL_VEL_LIMIT_MM_S (220.0f)
 #endif
-
-/*
- * 均值已近 0，本轮专压 ±80mm 振荡：
- *  降 Kp、升 Kd、更早更强制动、bias 仅低速学习
- */
-#ifndef BALL_CTRL_KP_POS
-#define BALL_CTRL_KP_POS (0.014f)
+#ifndef BALL_CTRL_DYNAMIC_CENTER_LEAD_S
+#define BALL_CTRL_DYNAMIC_CENTER_LEAD_S (0.04f)
 #endif
-#ifndef BALL_CTRL_KP_NEAR_POS
-#define BALL_CTRL_KP_NEAR_POS (0.032f)
-#endif
-#ifndef BALL_CTRL_NEAR_ERR_MM
-#define BALL_CTRL_NEAR_ERR_MM (48.0f)
-#endif
-#ifndef BALL_CTRL_KD_POS
-#define BALL_CTRL_KD_POS (0.060f)
-#endif
-#ifndef BALL_CTRL_KD_NEAR_POS
-#define BALL_CTRL_KD_NEAR_POS (0.300f)
+#ifndef BALL_CTRL_DYNAMIC_CENTER_MAX_MM
+#define BALL_CTRL_DYNAMIC_CENTER_MAX_MM (4.0f)
 #endif
 
-/* 更早、更强的速度制动 */
-#ifndef BALL_CTRL_BRAKE_ERR_MM
-#define BALL_CTRL_BRAKE_ERR_MM (65.0f)
+/* Pure visual position PID. The camera position is the only feedback. */
+#ifndef BALL_CTRL_PID_KP
+#define BALL_CTRL_PID_KP (0.0045f)
 #endif
-#ifndef BALL_CTRL_BRAKE_VEL_MM_S
-#define BALL_CTRL_BRAKE_VEL_MM_S (15.0f)
+#ifndef BALL_CTRL_PID_KI
+#define BALL_CTRL_PID_KI (0.0009f)
 #endif
-#ifndef BALL_CTRL_BRAKE_ROD_MM_X100
-#define BALL_CTRL_BRAKE_ROD_MM_X100 (90)
+#ifndef BALL_CTRL_PID_KD
+#define BALL_CTRL_PID_KD (0.008f)
 #endif
-
-/* kick 更保守，只在真正卡住时用 */
-#ifndef BALL_CTRL_KICK_ERR_MM
-#define BALL_CTRL_KICK_ERR_MM (70.0f)
+#ifndef BALL_CTRL_PID_NEAR_ERR_MM
+#define BALL_CTRL_PID_NEAR_ERR_MM (20.0f)
 #endif
-#ifndef BALL_CTRL_KICK_VEL_MM_S
-#define BALL_CTRL_KICK_VEL_MM_S (8.0f)
+#ifndef BALL_CTRL_PID_NEAR_KP
+#define BALL_CTRL_PID_NEAR_KP (0.0045f)
 #endif
-#ifndef BALL_CTRL_KICK_ROD_MM_X100
-#define BALL_CTRL_KICK_ROD_MM_X100 (70)
+#ifndef BALL_CTRL_PID_NEAR_KI
+#define BALL_CTRL_PID_NEAR_KI (0.0010f)
 #endif
-
-#ifndef BALL_CTRL_STICK_ERR_MM
-#define BALL_CTRL_STICK_ERR_MM (3.0f)
+#ifndef BALL_CTRL_PID_INTEGRAL_MAX
+#define BALL_CTRL_PID_INTEGRAL_MAX (0.16f)
 #endif
-#ifndef BALL_CTRL_STICK_VEL_MM_S
-#define BALL_CTRL_STICK_VEL_MM_S (5.0f)
+#ifndef BALL_CTRL_PID_INTEGRAL_MAX_ERR_MM
+#define BALL_CTRL_PID_INTEGRAL_MAX_ERR_MM (70.0f)
 #endif
-#ifndef BALL_CTRL_STICK_ROD_MM_X100
-#define BALL_CTRL_STICK_ROD_MM_X100 (20)
+#ifndef BALL_CTRL_PID_INTEGRAL_MAX_VEL_MM_S
+#define BALL_CTRL_PID_INTEGRAL_MAX_VEL_MM_S (8.0f)
 #endif
-
-/* bias：只在真正慢下来后学，防振荡中积分发散 */
-#ifndef BALL_CTRL_BIAS_KI
-#define BALL_CTRL_BIAS_KI (0.015f)
+#ifndef BALL_CTRL_PID_DEADBAND_MM
+#define BALL_CTRL_PID_DEADBAND_MM (1.0f)
 #endif
-#ifndef BALL_CTRL_BIAS_DEADBAND_MM
-#define BALL_CTRL_BIAS_DEADBAND_MM (2.0f)
+#ifndef BALL_CTRL_OUTPUT_MAX_MM_X100
+#define BALL_CTRL_OUTPUT_MAX_MM_X100 (46)
 #endif
-#ifndef BALL_CTRL_BIAS_ERR_MAX_MM
-#define BALL_CTRL_BIAS_ERR_MAX_MM (30.0f)
+#ifndef BALL_CTRL_COMMAND_SLEW_MM_X100
+#define BALL_CTRL_COMMAND_SLEW_MM_X100 (6)
 #endif
-#ifndef BALL_CTRL_BIAS_VEL_MAX_MM_S
-#define BALL_CTRL_BIAS_VEL_MAX_MM_S (10.0f)
-#endif
-#ifndef BALL_CTRL_BIAS_MAX_MM_X100
-#define BALL_CTRL_BIAS_MAX_MM_X100 (40)
+#ifndef BALL_CTRL_COMMAND_EPS_MM_X100
+#define BALL_CTRL_COMMAND_EPS_MM_X100 (1)
 #endif
 
-#ifndef BALL_CTRL_CONTROL_DEAD_MM
-#define BALL_CTRL_CONTROL_DEAD_MM (1.5f)
-#endif
 #ifndef BALL_CTRL_SETTLED_ERR_MM
-#define BALL_CTRL_SETTLED_ERR_MM (2.5f)
+#define BALL_CTRL_SETTLED_ERR_MM (4.0f)
 #endif
 #ifndef BALL_CTRL_SETTLED_VEL_MM_S
 #define BALL_CTRL_SETTLED_VEL_MM_S (4.0f)
 #endif
-
-/* 近点限幅收紧，减少过冲能量 */
-#ifndef BALL_CTRL_NEAR_ROD_MAX_MM_X100
-#define BALL_CTRL_NEAR_ROD_MAX_MM_X100 (45)
+#ifndef BALL_CTRL_SETTLED_CONFIRM_FRAMES
+#define BALL_CTRL_SETTLED_CONFIRM_FRAMES (5u)
 #endif
-#ifndef BALL_CTRL_FAR_ROD_MAX_MM_X100
-#define BALL_CTRL_FAR_ROD_MAX_MM_X100 (85)
+#ifndef BALL_CTRL_SETTLED_EXIT_ERR_MM
+#define BALL_CTRL_SETTLED_EXIT_ERR_MM (10.0f)
 #endif
-#ifndef BALL_CTRL_ROD_POS_MAX_MM_X100
-#define BALL_CTRL_ROD_POS_MAX_MM_X100 (90)
-#endif
-#ifndef BALL_CTRL_ROD_NEG_MAX_MM_X100
-#define BALL_CTRL_ROD_NEG_MAX_MM_X100 (75)
-#endif
-#ifndef BALL_CTRL_ROD_MAX_MM_X100
-#define BALL_CTRL_ROD_MAX_MM_X100 (BALL_CTRL_ROD_POS_MAX_MM_X100)
-#endif
-#ifndef BALL_CTRL_ROD_SLEW_MM_X100
-#define BALL_CTRL_ROD_SLEW_MM_X100 (22)
-#endif
-#ifndef BALL_CTRL_ROD_SLEW_BRAKE_MM_X100
-#define BALL_CTRL_ROD_SLEW_BRAKE_MM_X100 (40)
-#endif
-#ifndef BALL_CTRL_ROD_EPS_MM_X100
-#define BALL_CTRL_ROD_EPS_MM_X100 (1)
+#ifndef BALL_CTRL_SETTLED_EXIT_VEL_MM_S
+#define BALL_CTRL_SETTLED_EXIT_VEL_MM_S (12.0f)
 #endif
 
 #ifndef BALL_CTRL_TARGET_MIN_MM_X100
@@ -151,10 +105,10 @@
 #endif
 
 #ifndef BALL_CTRL_STEPPER_SPS
-#define BALL_CTRL_STEPPER_SPS (6000u)
+#define BALL_CTRL_STEPPER_SPS (1800u)
 #endif
 #ifndef BALL_CTRL_STEPPER_ACCEL
-#define BALL_CTRL_STEPPER_ACCEL (50000u)
+#define BALL_CTRL_STEPPER_ACCEL (8000u)
 #endif
 
 #ifndef BALL_CTRL_SIGN

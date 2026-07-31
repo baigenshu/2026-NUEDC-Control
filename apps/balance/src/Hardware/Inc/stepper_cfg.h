@@ -52,7 +52,7 @@
 #define STEPPER_SPS_HARD_MAX        (1000000u / (STEPPER_TICK_US * 2u))
 
 #ifndef STEPPER_DEFAULT_SPS
-#define STEPPER_DEFAULT_SPS         (6000u)
+#define STEPPER_DEFAULT_SPS         (3500u)
 #endif
 
 #ifndef STEPPER_MAX_SPS
@@ -60,7 +60,7 @@
 #endif
 
 #ifndef STEPPER_START_SPS
-#define STEPPER_START_SPS           (800u)
+#define STEPPER_START_SPS          (800u)
 #endif
 
 #ifndef STEPPER_ACCEL_SPS2
@@ -76,7 +76,15 @@
 #define STEPPER_EN_ACTIVE_LOW       (1)
 #endif
 
-/* 曲柄硬软限位：约 ±20° 电机轴 @ 1/16 → ±180 step */
+/*
+ * This is a relative pulse window from the software zero. It is not a
+ * mechanical limit unless software zero was established by homing first.
+ */
+#ifndef STEPPER_SOFT_LIMIT_ENABLE
+#define STEPPER_SOFT_LIMIT_ENABLE    (0)
+#endif
+
+/* Relative command window after a valid homing/manual-zero procedure. */
 #ifndef STEPPER_SOFT_MIN_STEPS
 #define STEPPER_SOFT_MIN_STEPS      (-180)
 #endif

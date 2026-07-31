@@ -39,7 +39,7 @@ void BallCtrl_Update(void);
 
 ball_ctrl_state_t BallCtrl_GetState(void);
 int32_t BallCtrl_GetBallMm_x100(void);     /* 滤波后球位 */
-int32_t BallCtrl_GetRodMm_x100(void);      /* 当前倾角指令（0.01 unit） */
+    int32_t BallCtrl_GetRodMm_x100(void);      /* 当前开环执行命令，不是反馈 */
 bool    BallCtrl_IsSettled(void);
 
 #endif /* BALL_CTRL_H */

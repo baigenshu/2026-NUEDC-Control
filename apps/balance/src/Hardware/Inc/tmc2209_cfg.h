@@ -9,10 +9,10 @@
 #define TMC2209_MOTOR_RATED_MA       (1200u)
 #endif
 #ifndef TMC2209_IRUN_MA
-#define TMC2209_IRUN_MA              (850u)
+#define TMC2209_IRUN_MA              (600u)
 #endif
 #ifndef TMC2209_IHOLD_MA
-#define TMC2209_IHOLD_MA             (220u)
+#define TMC2209_IHOLD_MA             (120u)
 #endif
 
 /* 板级采样电阻 / 内部参考，用于 mA → 寄存器码换算 */

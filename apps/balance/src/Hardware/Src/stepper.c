@@ -67,10 +67,14 @@ static void apply_period_from_sps(uint32_t sps)
 
 static int32_t clamp_soft(int32_t steps)
 {
+#if STEPPER_SOFT_LIMIT_ENABLE
     if (steps < (int32_t)STEPPER_SOFT_MIN_STEPS)
         return (int32_t)STEPPER_SOFT_MIN_STEPS;
     if (steps > (int32_t)STEPPER_SOFT_MAX_STEPS)
         return (int32_t)STEPPER_SOFT_MAX_STEPS;
+#else
+    (void)steps;
+#endif
     return steps;
 }
 
