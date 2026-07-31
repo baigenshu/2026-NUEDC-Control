@@ -1,8 +1,8 @@
 # balance 引脚与外设映射
 
-> 工程：apps/balance · **TMC_A 单轴步进驱动**（纯驱动层，业务另接）  
+> apps/balance · 曲柄连杆摆杆 + 视觉球位闭环 · 2026-07-31  
 > 主控：MSPM0G3507 · 云台/平衡驱动板  
-> 依据：SCH 云台驱动原理图 · 更新 2026-07-29
+> 机械：合页铰支 + 25 cm 凹槽摆杆 + 步进曲柄连杆（非丝杆）
 
 ---
 
@@ -15,26 +15,34 @@
 | STEP | PA12 | `GPIO_STEPPER_STEP_PIN` |
 | 脉冲时基 | TIMG7 | `STEP_TIM_INST` · 10 µs ZERO IRQ |
 | 端口 | GPIOA | `GPIO_STEPPER_PORT` |
+| TMC UART TX | PA8 | `TMC_UART_INST` · UART1 · 115200 |
+| TMC UART RX | PA9 | `TMC_UART_INST` · UART1 · 115200 |
+| 视觉 UART TX | PA28 | `VISION_UART` · UART0 · 115200 |
+| 视觉 UART RX | PA31 | `VISION_UART` · UART0 · 115200 |
 
 硬件固定：MS1/MS2=GND · VM=+12V · VIO=3V3 · TMC_B 未用。
 
-## 2. 电机 / 机械（42×23 + M5）
+## 2. 电机 / 机械（曲柄连杆）
 
 | 参数 | 值 |
 |------|-----|
-| 电机 | 42×23 · 1.8° · **1.2 A 额定** · 4.2 Ω · 4.0 mH · 0.16 N·m |
-| 建议 IRUN | **0.7–0.9 A**（轻载，降发热；电位器/VREF 硬件调） |
-| 建议 IHOLD | **0.25–0.4 A**；软件到位/丢球会 **关 EN** |
-| 导程 | **0.8 mm/圈**（M5 实测） |
-| 微步 | 1/8 × 200 = 1600 step/rev → **2000 step/mm** |
+| 电机 | 42 系 · 1.8° · 1.2 A 额定 · TMC2209 |
+| 微步 | 1/8 × 200 = 1600 step/rev |
+| 执行机构 | 曲柄 → 连杆 → 摆杆倾角 |
+| 抽象单位 | 1.00 unit = `STEPPER_STEPS_PER_UNIT`(默认 200) 微步 |
+| 软限位 | ±400 微步（约 ±90° 电机轴，防顶死） |
+| 电流 | `tmc2209_cfg.h`：IRUN 850 mA / IHOLD 220 mA（可降） |
+
+BallCtrl 输出 `rod_x100`（0.01 unit）经 `Stepper_SetTargetMm_x100()` 换算为曲柄微步。
 
 ## 3. 软件
 
 | 文件 | 说明 |
 |------|------|
-| `stepper_*` | 丝杆开环位置 + 梯形加减速 |
+| `stepper_*` | 曲柄开环位置 + 梯形加减速 |
 | `vision_uart.*` | UART 收 0x02/0x12 |
-| `ball_ctrl_*` | PD 闭环任意定点停球 |
+| `ball_ctrl_*` | 位置 PD 闭环任意定点停球 |
+| `tmc2209_*` | 上电写 IHOLD/IRUN |
 | `main.c` | SysTick + Poll + Update |
 
 ```c
@@ -44,7 +52,7 @@ BallCtrl_Enable(true);
 /* 主循环：VisionUart_Poll(); BallCtrl_Update(); */
 ```
 
-## 4. 视觉球位 UART（协议已定，外设待开）
+## 4. 视觉球位 UART
 
 | 项 | 约定 |
 |----|------|
@@ -53,15 +61,10 @@ BallCtrl_Enable(true);
 | 波特率 | 115200 8N1 |
 | 接线 | 视觉 TX → **PA31 (UART0 RX)** · 共地；可选 PA28 TX |
 | 发送端 | `apps/maixcam/opencv`（`pack_ball_frame`） |
+| 定点命令 | type=`0x12` · `target_mm` 整 mm |
 
-SysConfig 已启用 **VISION_UART = UART0**（PA28 TX / PA31 RX @ 115200）。
+## 5. 极性与标定
 
-| 软件 | 说明 |
-|------|------|
-| `vision_uart` | 收 type 0x02 球位 / 0x12 定点 |
-| `ball_ctrl` | PD 闭环，任意定点停球 |
-
-## 5. 其它预留
-
-- 按键 PB8、LED PB9、TMC 共 UART PA8/9
-- 未启用。
+- 协议：视觉 `pos_mm` + = O 右侧（与图示一致）。
+- 控制：`BALL_CTRL_SIGN` / `STEPPER_DIR_SIGN`；实装反了只改其一。
+- 上电假定曲柄在“水平/中位”为零点；机械零点需上电前手动摆正。

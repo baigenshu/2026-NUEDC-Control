@@ -1,47 +1,31 @@
 /**
  * @file stepper_cfg.h
- * @brief TMC_A 步进 + 42×23 电机 / M5 丝杆
+ * @brief TMC_A 步进 + 曲柄连杆摆杆执行机构
  *
- * 电机铭牌：
- *   尺寸 42×23 · 步距角 1.8°(200 fullstep) · 额定 1.2 A
- *   相电阻 4.2 Ω · 相电感 4.0 mH · 堵转扭矩 0.16 N·m
+ * 机械（按 CAD / 赛题结构）：
+ *   左端合页铰支 → 水平凹槽摆杆（约 25 cm）→ 右端曲柄连杆抬升/下压
+ *   步进电机驱动蓝色曲柄，经连杆改变摆杆倾角，从而控制钢珠一维位置
  *
- * 驱动板：STEP/DIR/EN bit-bang；电流由 TMC 硬件设定（非本固件写寄存器）
- * 建议（降发热，摆杆负载轻）：
- *   IRUN  ≈ 0.70–0.90 A（约 0.6–0.75×额定，够 0.16 N·m 轻载）
- *   IHOLD ≈ 0.25–0.40 A（或软件到位关 EN，本工程 ball_ctrl 已做）
- *   TMC2209 常见：VREF ≈ IRUN_peak × Rsense 相关，按板子丝印/手册调电位器
- *   经验：发烫先降 VREF；丢步再略升。VM=12V 时勿长时间 100% 额定电流静置
- *
+ * 电机：42 系 1.8° · 1/16 微步（UART MRES 覆盖 MS 脚）· TMC2209
  * 引脚：EN=PA14 DIR=PA13 STEP=PA12 · TIMG7 10us
- * 机械：M5 丝杆，实测 1 圈 ≈ 0.8 mm
+ *
+ * 控制接口仍用“抽象倾角单位”0.01 unit：
+ *   BallCtrl 输出 rod_x100 → Stepper_SetTargetMm_x100()
+ *   1.00 unit 对应 STEPPER_STEPS_PER_UNIT 微步（近水平线性化，可标定）
  */
 #ifndef STEPPER_CFG_H
 #define STEPPER_CFG_H
 
 #include <stdint.h>
 
-/* ---------- 42 电机电气（文档/标定用，驱动电流在 TMC 硬件） ---------- */
+/* ---------- 电机电气（电流在 tmc2209_cfg.h） ---------- */
 #ifndef STEPPER_MOTOR_RATED_MA
 #define STEPPER_MOTOR_RATED_MA      (1200u)
-#endif
-/* 推荐运行电流 mA（轻载摆杆） */
-#ifndef STEPPER_IRUN_MA_RECOMMENDED
-#define STEPPER_IRUN_MA_RECOMMENDED (800u)
-#endif
-#ifndef STEPPER_IHOLD_MA_RECOMMENDED
-#define STEPPER_IHOLD_MA_RECOMMENDED (300u)
-#endif
-#ifndef STEPPER_PHASE_R_MOHM
-#define STEPPER_PHASE_R_MOHM        (4200u)  /* 4.2 Ω */
-#endif
-#ifndef STEPPER_PHASE_L_UH
-#define STEPPER_PHASE_L_UH          (4000u)  /* 4.0 mH */
 #endif
 
 /* ---------- 微步 / 电机 ---------- */
 #ifndef STEPPER_MICROSTEPS
-#define STEPPER_MICROSTEPS          (8u)     /* MS1=MS2=GND → 1/8 */
+#define STEPPER_MICROSTEPS          (16u)    /* UART → 1/16，减段落感 */
 #endif
 
 #ifndef STEPPER_FULLSTEPS_PER_REV
@@ -51,36 +35,39 @@
 #define STEPPER_STEPS_PER_REV \
     ((uint32_t)STEPPER_FULLSTEPS_PER_REV * (uint32_t)STEPPER_MICROSTEPS)
 
-/* ---------- 丝杆导程 ---------- */
-#ifndef STEPPER_LEAD_UM
-#define STEPPER_LEAD_UM             (800u)   /* µm/圈 · 实测 0.8 mm */
+/* 每微步电机轴转角 0.1125° @ 1/16 → 0.01° 量化为 11 */
+#define STEPPER_MOTOR_DEG_X100_PER_STEP (11)
+
+/* ---------- 抽象倾角单位 → 微步（曲柄近水平标定） ---------- */
+/* 1.00 unit = 160 microsteps @1/16 ≈ 18° 电机轴（与旧 80@1/8 同角） */
+#ifndef STEPPER_STEPS_PER_UNIT
+#define STEPPER_STEPS_PER_UNIT      (160u)
 #endif
 
-#define STEPPER_STEPS_PER_MM \
-    ((uint32_t)((STEPPER_STEPS_PER_REV * 1000u) / STEPPER_LEAD_UM))
+/* 兼容旧 API 名：Mm_x100 实为 tilt_x100（0.01 unit） */
+#define STEPPER_LEAD_UM             (1000u)  /* 占位，不再按丝杆解释 */
 
-/* ---------- 速度 / 加速度（匹配 42 小惯量 + 电感 4 mH） ---------- */
+/* ---------- 速度 / 加速度（抬高，减梯形段落感） ---------- */
 #define STEPPER_TICK_US             (10u)
 #define STEPPER_SPS_HARD_MAX        (1000000u / (STEPPER_TICK_US * 2u))
 
-/* 默认巡航：勿过高，高微步频率 + 满电流 → 啸叫发热 */
 #ifndef STEPPER_DEFAULT_SPS
-#define STEPPER_DEFAULT_SPS         (3500u)
+#define STEPPER_DEFAULT_SPS         (6000u)
 #endif
 
 #ifndef STEPPER_MAX_SPS
-#define STEPPER_MAX_SPS             (20000u)
+#define STEPPER_MAX_SPS             (14000u)
 #endif
 
-/* 起步略低，减微振 */
 #ifndef STEPPER_START_SPS
-#define STEPPER_START_SPS           (400u)
+#define STEPPER_START_SPS           (800u)
 #endif
 
 #ifndef STEPPER_ACCEL_SPS2
-#define STEPPER_ACCEL_SPS2          (25000u)
+#define STEPPER_ACCEL_SPS2          (50000u)
 #endif
 
+/* 若倾角方向与视觉 + 反向：改为 -1 */
 #ifndef STEPPER_DIR_SIGN
 #define STEPPER_DIR_SIGN            (1)
 #endif
@@ -89,12 +76,13 @@
 #define STEPPER_EN_ACTIVE_LOW       (1)
 #endif
 
+/* 曲柄硬软限位：约 ±20° 电机轴 @ 1/16 → ±180 step */
 #ifndef STEPPER_SOFT_MIN_STEPS
-#define STEPPER_SOFT_MIN_STEPS      (-40000)
+#define STEPPER_SOFT_MIN_STEPS      (-180)
 #endif
 
 #ifndef STEPPER_SOFT_MAX_STEPS
-#define STEPPER_SOFT_MAX_STEPS      ( 40000)
+#define STEPPER_SOFT_MAX_STEPS      ( 180)
 #endif
 
 #endif /* STEPPER_CFG_H */

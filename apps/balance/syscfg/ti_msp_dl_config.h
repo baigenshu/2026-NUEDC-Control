@@ -102,6 +102,22 @@ extern "C" {
 #define VISION_UART_BAUD_RATE                                           (115200)
 #define VISION_UART_IBRD_40_MHZ_115200_BAUD                                 (21)
 #define VISION_UART_FBRD_40_MHZ_115200_BAUD                                 (45)
+/* Defines for TMC_UART */
+#define TMC_UART_INST                                                      UART1
+#define TMC_UART_INST_FREQUENCY                                         40000000
+#define TMC_UART_INST_IRQHandler                                UART1_IRQHandler
+#define TMC_UART_INST_INT_IRQN                                    UART1_INT_IRQn
+#define GPIO_TMC_UART_RX_PORT                                              GPIOA
+#define GPIO_TMC_UART_TX_PORT                                              GPIOA
+#define GPIO_TMC_UART_RX_PIN                                       DL_GPIO_PIN_9
+#define GPIO_TMC_UART_TX_PIN                                       DL_GPIO_PIN_8
+#define GPIO_TMC_UART_IOMUX_RX                                   (IOMUX_PINCM20)
+#define GPIO_TMC_UART_IOMUX_TX                                   (IOMUX_PINCM19)
+#define GPIO_TMC_UART_IOMUX_RX_FUNC                    IOMUX_PINCM20_PF_UART1_RX
+#define GPIO_TMC_UART_IOMUX_TX_FUNC                    IOMUX_PINCM19_PF_UART1_TX
+#define TMC_UART_BAUD_RATE                                              (115200)
+#define TMC_UART_IBRD_40_MHZ_115200_BAUD                                    (21)
+#define TMC_UART_FBRD_40_MHZ_115200_BAUD                                    (45)
 
 
 
@@ -130,6 +146,7 @@ void SYSCFG_DL_GPIO_init(void);
 void SYSCFG_DL_SYSCTL_init(void);
 void SYSCFG_DL_STEP_TIM_init(void);
 void SYSCFG_DL_VISION_UART_init(void);
+void SYSCFG_DL_TMC_UART_init(void);
 
 void SYSCFG_DL_SYSTICK_init(void);
 

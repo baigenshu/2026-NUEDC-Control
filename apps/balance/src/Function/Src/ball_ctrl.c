@@ -1,10 +1,13 @@
 /**
  * @file ball_ctrl.c
- * @brief Ball position PID -> leadscrew rod command
+ * @brief Low-rate visual ball position controller (crank-linkage boom).
+ *
+ * Feedback: vision pos_mm relative to O.
+ * Actuation: abstract boom tilt rod_x100 → Stepper_SetTargetMm_x100().
+ * Goal phase-1: hold ball at O or any setpoint while chassis is stationary.
  */
 #include "ball_ctrl.h"
 #include "ball_ctrl_cfg.h"
-#include "ball_proto.h"
 #include "vision_uart.h"
 #include "stepper.h"
 
@@ -15,29 +18,46 @@ static int32_t           s_ball_mm_x100;
 static int32_t           s_rod_mm_x100;
 static float             s_ball_f;
 static float             s_vel_mm_s;
-static float             s_rod_f;
-static float             s_i_pos;
+static float             s_bias_mm;
 static bool              s_have_ball;
-static uint32_t          s_ms_accum;
 static uint32_t          s_last_frame_ms;
 static uint32_t          s_ms_total;
-static bool              s_rod_applied;
-static uint32_t          s_settle_ms;
 static uint32_t          s_lost_ms;
+static uint8_t           s_bad_frames;
+static bool              s_rod_applied;
 static bool              s_coils_off;
 
-static int32_t clamp_i32(int32_t v, int32_t lo, int32_t hi)
+static int32_t clamp_i32(int32_t value, int32_t lower, int32_t upper)
 {
-    if (v < lo) return lo;
-    if (v > hi) return hi;
-    return v;
+    if (value < lower)
+        return lower;
+    if (value > upper)
+        return upper;
+    return value;
 }
 
-static float clampf(float v, float lo, float hi)
+static float clampf(float value, float lower, float upper)
 {
-    if (v < lo) return lo;
-    if (v > hi) return hi;
-    return v;
+    if (value < lower)
+        return lower;
+    if (value > upper)
+        return upper;
+    return value;
+}
+
+static float absf(float value)
+{
+    return value < 0.0f ? -value : value;
+}
+
+static void reset_dynamic_state(void)
+{
+    s_ball_f = 0.0f;
+    s_vel_mm_s = 0.0f;
+    s_bias_mm = 0.0f;
+    s_have_ball = false;
+    s_last_frame_ms = 0u;
+    s_bad_frames = 0u;
 }
 
 static void coils_on(void)
@@ -55,9 +75,236 @@ static void coils_off(void)
     s_coils_off = true;
 }
 
-static void reset_integrators(void)
+static int32_t s_slew_limit_x100 = (int32_t)BALL_CTRL_ROD_SLEW_MM_X100;
+
+static void apply_rod(int32_t rod_mm_x100)
 {
-    s_i_pos = 0.0f;
+    int32_t previous = s_rod_mm_x100;
+    int32_t delta;
+    int32_t slew = s_slew_limit_x100;
+
+    if (slew < (int32_t)BALL_CTRL_ROD_SLEW_MM_X100)
+        slew = (int32_t)BALL_CTRL_ROD_SLEW_MM_X100;
+
+    /* 正/负不对称限幅 */
+    rod_mm_x100 = clamp_i32(
+        rod_mm_x100,
+        -(int32_t)BALL_CTRL_ROD_NEG_MAX_MM_X100,
+        (int32_t)BALL_CTRL_ROD_POS_MAX_MM_X100);
+
+    if (s_rod_applied) {
+        delta = rod_mm_x100 - previous;
+        if (delta < (int32_t)BALL_CTRL_ROD_EPS_MM_X100 &&
+            delta > -(int32_t)BALL_CTRL_ROD_EPS_MM_X100)
+            return;
+        if (delta > slew)
+            rod_mm_x100 = previous + slew;
+        else if (delta < -slew)
+            rod_mm_x100 = previous - slew;
+        if (rod_mm_x100 == previous)
+            return;
+    }
+
+    coils_on();
+    s_rod_mm_x100 = rod_mm_x100;
+    s_rod_applied = true;
+    Stepper_SetTargetMm_x100(rod_mm_x100);
+    /* 默认斜率；制动帧会临时抬高 */
+    s_slew_limit_x100 = (int32_t)BALL_CTRL_ROD_SLEW_MM_X100;
+}
+
+static void enter_lost(void)
+{
+    if (s_state != BALL_CTRL_STATE_LOST)
+        s_lost_ms = 0u;
+    s_state = BALL_CTRL_STATE_LOST;
+    s_ball_mm_x100 = 0;
+    reset_dynamic_state();
+#if BALL_CTRL_HOLD_LEVEL_ON_LOSS
+    s_rod_applied = false;
+    apply_rod(0);
+#endif
+}
+
+static void update_measurement(const ball_frame_t *frame, float *dt_s)
+{
+    float raw_mm;
+    float previous_mm;
+    float instant_velocity;
+    uint32_t frame_dt_ms;
+
+    raw_mm = (float)ball_pos_to_mm_x100(frame->pos_mm) / 100.0f;
+    *dt_s = (float)BALL_CTRL_DEFAULT_FRAME_DT_MS / 1000.0f;
+
+    if (!s_have_ball) {
+        s_ball_f = raw_mm;
+        s_vel_mm_s = 0.0f;
+        s_have_ball = true;
+    } else {
+        frame_dt_ms = s_ms_total - s_last_frame_ms;
+        if (frame_dt_ms < 30u)
+            frame_dt_ms = 30u;
+        if (frame_dt_ms > 250u)
+            frame_dt_ms = 250u;
+        *dt_s = (float)frame_dt_ms / 1000.0f;
+
+        previous_mm = s_ball_f;
+        s_ball_f += BALL_CTRL_POS_ALPHA * (raw_mm - s_ball_f);
+        instant_velocity = (s_ball_f - previous_mm) / *dt_s;
+        instant_velocity = clampf(
+            instant_velocity,
+            -BALL_CTRL_VEL_LIMIT_MM_S,
+            BALL_CTRL_VEL_LIMIT_MM_S);
+        s_vel_mm_s += BALL_CTRL_VEL_ALPHA *
+            (instant_velocity - s_vel_mm_s);
+    }
+
+    s_last_frame_ms = s_ms_total;
+    if (s_ball_f >= 0.0f)
+        s_ball_mm_x100 = (int32_t)(s_ball_f * 100.0f + 0.5f);
+    else
+        s_ball_mm_x100 = (int32_t)(s_ball_f * 100.0f - 0.5f);
+}
+
+static void control_from_measurement(float dt_s)
+{
+    float predicted_ball_mm;
+    float error_mm;
+    float abs_error_mm;
+    float kp;
+    float near_weight;
+    float output_limit;
+    float bias_error;
+    float correction_mm;
+    float rod_mm;
+    float minimum_rod_mm;
+    float desired_sign;
+    int32_t error_x100;
+
+    predicted_ball_mm = s_ball_f + s_vel_mm_s *
+        ((float)BALL_CTRL_PREDICT_MS / 1000.0f);
+    error_mm = (float)s_target_mm_x100 / 100.0f - predicted_ball_mm;
+    abs_error_mm = absf(error_mm);
+
+    if (abs_error_mm <= BALL_CTRL_CONTROL_DEAD_MM)
+        error_mm = 0.0f;
+    abs_error_mm = absf(error_mm);
+
+    near_weight = 1.0f - abs_error_mm / BALL_CTRL_NEAR_ERR_MM;
+    near_weight = clampf(near_weight, 0.0f, 1.0f);
+    kp = BALL_CTRL_KP_POS +
+        (BALL_CTRL_KP_NEAR_POS - BALL_CTRL_KP_POS) * near_weight;
+    {
+        float kd = BALL_CTRL_KD_POS +
+            (BALL_CTRL_KD_NEAR_POS - BALL_CTRL_KD_POS) * near_weight;
+        output_limit = (float)BALL_CTRL_FAR_ROD_MAX_MM_X100 / 100.0f +
+            ((float)BALL_CTRL_NEAR_ROD_MAX_MM_X100 / 100.0f -
+             (float)BALL_CTRL_FAR_ROD_MAX_MM_X100 / 100.0f) * near_weight;
+
+        bias_error = error_mm;
+        if (bias_error > BALL_CTRL_BIAS_DEADBAND_MM)
+            bias_error -= BALL_CTRL_BIAS_DEADBAND_MM;
+        else if (bias_error < -BALL_CTRL_BIAS_DEADBAND_MM)
+            bias_error += BALL_CTRL_BIAS_DEADBAND_MM;
+        else
+            bias_error = 0.0f;
+
+        if (abs_error_mm <= BALL_CTRL_BIAS_ERR_MAX_MM &&
+            absf(s_vel_mm_s) <= BALL_CTRL_BIAS_VEL_MAX_MM_S) {
+            s_bias_mm += BALL_CTRL_SIGN * BALL_CTRL_BIAS_KI *
+                bias_error * dt_s;
+            s_bias_mm = clampf(
+                s_bias_mm,
+                -(float)BALL_CTRL_BIAS_MAX_MM_X100 / 100.0f,
+                (float)BALL_CTRL_BIAS_MAX_MM_X100 / 100.0f);
+        } else {
+            s_bias_mm *= 0.995f;
+        }
+
+        correction_mm = BALL_CTRL_SIGN *
+            (kp * error_mm - kd * s_vel_mm_s);
+    }
+
+    /*
+     * 优先级：
+     * 1) 冲向目标且速度大 → 反向制动（压过冲）
+     * 2) 大误差且几乎卡住 → kick 拉回端点
+     * 3) 中等误差低速 → stick 最小倾角
+     * 否则走调度 PD
+     */
+    if (abs_error_mm <= BALL_CTRL_BRAKE_ERR_MM &&
+        absf(s_vel_mm_s) >= BALL_CTRL_BRAKE_VEL_MM_S &&
+        ((error_mm > 0.0f && s_vel_mm_s > 0.0f) ||
+         (error_mm < 0.0f && s_vel_mm_s < 0.0f) ||
+         /* 已越过目标仍高速：也要制动 */
+         (error_mm > 0.0f && s_vel_mm_s < -BALL_CTRL_BRAKE_VEL_MM_S) ||
+         (error_mm < 0.0f && s_vel_mm_s > BALL_CTRL_BRAKE_VEL_MM_S))) {
+        float brake_scale;
+        float spd = absf(s_vel_mm_s);
+        /* 速度越大制动越满；近中心优先刹停 */
+        brake_scale = spd / 45.0f;
+        if (brake_scale > 1.0f)
+            brake_scale = 1.0f;
+        if (brake_scale < 0.55f)
+            brake_scale = 0.55f;
+        if (abs_error_mm < 40.0f && brake_scale < 0.85f)
+            brake_scale = 0.85f;
+
+        minimum_rod_mm =
+            ((float)BALL_CTRL_BRAKE_ROD_MM_X100 / 100.0f) * brake_scale;
+        /* 始终按速度反向制动（与误差符号无关，先消能量） */
+        correction_mm = (s_vel_mm_s > 0.0f) ?
+            -minimum_rod_mm : minimum_rod_mm;
+        correction_mm *= BALL_CTRL_SIGN;
+        /* 近中心几乎纯制动；远处保留少量位置项 */
+        if (abs_error_mm < 35.0f)
+            correction_mm = 0.90f * correction_mm +
+                0.10f * BALL_CTRL_SIGN * (kp * error_mm);
+        else
+            correction_mm = 0.70f * correction_mm +
+                0.30f * BALL_CTRL_SIGN * (kp * error_mm);
+        if (output_limit < minimum_rod_mm)
+            output_limit = minimum_rod_mm;
+        s_slew_limit_x100 = (int32_t)BALL_CTRL_ROD_SLEW_BRAKE_MM_X100;
+    } else if (abs_error_mm >= BALL_CTRL_KICK_ERR_MM &&
+               absf(s_vel_mm_s) <= BALL_CTRL_KICK_VEL_MM_S) {
+        minimum_rod_mm =
+            (float)BALL_CTRL_KICK_ROD_MM_X100 / 100.0f;
+        desired_sign = BALL_CTRL_SIGN * error_mm;
+        correction_mm = desired_sign < 0.0f ?
+            -minimum_rod_mm : minimum_rod_mm;
+        if (output_limit < minimum_rod_mm)
+            output_limit = minimum_rod_mm;
+    } else if (abs_error_mm > BALL_CTRL_STICK_ERR_MM &&
+               absf(s_vel_mm_s) <= BALL_CTRL_STICK_VEL_MM_S) {
+        minimum_rod_mm =
+            (float)BALL_CTRL_STICK_ROD_MM_X100 / 100.0f;
+        desired_sign = BALL_CTRL_SIGN * error_mm;
+        if (absf(correction_mm) < minimum_rod_mm)
+            correction_mm = desired_sign < 0.0f ?
+                -minimum_rod_mm : minimum_rod_mm;
+    }
+
+    /* 已接近且低速：保留 bias + 小纠偏，避免杆回 0 再滑走 */
+    if (abs_error_mm <= BALL_CTRL_SETTLED_ERR_MM &&
+        absf(s_vel_mm_s) <= BALL_CTRL_SETTLED_VEL_MM_S) {
+        correction_mm *= 0.55f;
+    }
+
+    rod_mm = s_bias_mm + clampf(correction_mm, -output_limit, output_limit);
+    rod_mm = clampf(
+        rod_mm,
+        -(float)BALL_CTRL_ROD_NEG_MAX_MM_X100 / 100.0f,
+        (float)BALL_CTRL_ROD_POS_MAX_MM_X100 / 100.0f);
+
+    if (abs_error_mm <= BALL_CTRL_SETTLED_ERR_MM &&
+        absf(s_vel_mm_s) <= BALL_CTRL_SETTLED_VEL_MM_S)
+        s_state = BALL_CTRL_STATE_SETTLED;
+    else
+        s_state = BALL_CTRL_STATE_RUN;
+
+    error_x100 = (int32_t)(rod_mm * 100.0f);
+    apply_rod(error_x100);
 }
 
 void BallCtrl_Init(void)
@@ -67,18 +314,11 @@ void BallCtrl_Init(void)
     s_target_mm_x100 = BALL_CTRL_DEFAULT_TARGET_MM_X100;
     s_ball_mm_x100 = 0;
     s_rod_mm_x100 = 0;
-    s_ball_f = 0.0f;
-    s_vel_mm_s = 0.0f;
-    s_rod_f = 0.0f;
-    reset_integrators();
-    s_have_ball = false;
-    s_ms_accum = 0;
-    s_last_frame_ms = 0;
-    s_ms_total = 0;
+    s_ms_total = 0u;
+    s_lost_ms = 0u;
     s_rod_applied = false;
-    s_settle_ms = 0;
-    s_lost_ms = 0;
     s_coils_off = true;
+    reset_dynamic_state();
 
     Stepper_SetSpeedSps(BALL_CTRL_STEPPER_SPS);
     Stepper_SetAccel(BALL_CTRL_STEPPER_ACCEL);
@@ -90,18 +330,15 @@ void BallCtrl_Enable(bool on)
     if (on) {
         coils_on();
         s_state = BALL_CTRL_STATE_RUN;
-        s_ms_accum = 0;
+        s_lost_ms = 0u;
         s_rod_applied = false;
-        s_settle_ms = 0;
-        s_lost_ms = 0;
-        reset_integrators();
+        s_rod_mm_x100 = 0;
+        reset_dynamic_state();
     } else {
         s_state = BALL_CTRL_STATE_IDLE;
-        s_rod_f = 0.0f;
         s_rod_mm_x100 = 0;
         s_rod_applied = false;
-        s_settle_ms = 0;
-        reset_integrators();
+        reset_dynamic_state();
         coils_off();
     }
 }
@@ -117,8 +354,7 @@ void BallCtrl_SetTargetMm_x100(int32_t mm_x100)
         mm_x100,
         (int32_t)BALL_CTRL_TARGET_MIN_MM_X100,
         (int32_t)BALL_CTRL_TARGET_MAX_MM_X100);
-    s_settle_ms = 0;
-    reset_integrators();
+    s_bias_mm = 0.0f;
     if (s_en)
         coils_on();
 }
@@ -135,146 +371,19 @@ void BallCtrl_SetTargetMm(int16_t pos_mm)
 
 void BallCtrl_OnMsTick(void)
 {
-    if (s_ms_accum < 100000u)
-        s_ms_accum++;
     s_ms_total++;
-    if (s_state == BALL_CTRL_STATE_SETTLED && s_settle_ms < 1000000u)
-        s_settle_ms++;
     if (s_state == BALL_CTRL_STATE_LOST && s_lost_ms < 1000000u)
         s_lost_ms++;
 }
 
-static void apply_rod(int32_t rod_mm_x100)
-{
-    int32_t prev = s_rod_mm_x100;
-    int32_t d;
-
-    rod_mm_x100 = clamp_i32(
-        rod_mm_x100,
-        -(int32_t)BALL_CTRL_ROD_MAX_MM_X100,
-        (int32_t)BALL_CTRL_ROD_MAX_MM_X100);
-
-    if (s_rod_applied) {
-        d = rod_mm_x100 - prev;
-        if (d > (int32_t)BALL_CTRL_ROD_SLEW_MM_X100)
-            rod_mm_x100 = prev + (int32_t)BALL_CTRL_ROD_SLEW_MM_X100;
-        else if (d < -(int32_t)BALL_CTRL_ROD_SLEW_MM_X100)
-            rod_mm_x100 = prev - (int32_t)BALL_CTRL_ROD_SLEW_MM_X100;
-    }
-
-    if (s_rod_applied) {
-        d = rod_mm_x100 - prev;
-        if (d < 0)
-            d = -d;
-        if (d < (int32_t)BALL_CTRL_ROD_EPS_MM_X100)
-            return;
-    }
-
-    coils_on();
-    s_rod_mm_x100 = rod_mm_x100;
-    s_rod_applied = true;
-    Stepper_SetTargetMm_x100(s_rod_mm_x100);
-}
-
-static void on_lost(void)
-{
-    if (s_state != BALL_CTRL_STATE_LOST)
-        s_lost_ms = 0;
-    s_state = BALL_CTRL_STATE_LOST;
-    s_have_ball = false;
-    s_vel_mm_s = 0.0f;
-    s_settle_ms = 0;
-    reset_integrators();
-#if BALL_CTRL_HOLD_LEVEL_ON_LOSS
-    s_rod_f = 0.0f;
-    apply_rod(0);
-#endif
-}
-
-static void control_step(float dt_s)
-{
-    float e_mm;
-    float abs_e;
-    float rod_mm;
-    float rod_unsat;
-    float out_a = BALL_CTRL_OUT_ALPHA;
-    int32_t err_x100;
-    int32_t abs_err;
-    float rod_max = (float)BALL_CTRL_ROD_MAX_MM_X100 / 100.0f;
-
-    if (dt_s < 1e-4f)
-        dt_s = 1e-4f;
-
-    err_x100 = s_target_mm_x100 - s_ball_mm_x100;
-    abs_err = err_x100 >= 0 ? err_x100 : -err_x100;
-    e_mm = (float)err_x100 / 100.0f;
-    abs_e = e_mm >= 0.0f ? e_mm : -e_mm;
-
-    /* settled: near target and slow */
-    if ((abs_err < (int32_t)BALL_CTRL_DEAD_MM_X100) &&
-        (s_vel_mm_s < BALL_CTRL_VEL_DEAD_MM_S) &&
-        (s_vel_mm_s > -BALL_CTRL_VEL_DEAD_MM_S)) {
-        s_state = BALL_CTRL_STATE_SETTLED;
-        reset_integrators();
-        s_rod_f *= 0.65f;
-        if (s_rod_f > -0.08f && s_rod_f < 0.08f)
-            s_rod_f = 0.0f;
-        apply_rod((int32_t)(s_rod_f * 100.0f));
-
-        if (s_rod_mm_x100 > -(int32_t)BALL_CTRL_ROD_EPS_MM_X100 &&
-            s_rod_mm_x100 < (int32_t)BALL_CTRL_ROD_EPS_MM_X100 &&
-            s_settle_ms >= (uint32_t)BALL_CTRL_SETTLE_DISABLE_MS) {
-            if (!s_coils_off)
-                coils_off();
-        }
-        return;
-    }
-
-    s_state = BALL_CTRL_STATE_RUN;
-    s_settle_ms = 0;
-    coils_on();
-
-    /* Position-form PID; derivative is taken on measured ball velocity. */
-    if (abs_e < BALL_CTRL_I_SEP_MM)
-        s_i_pos += e_mm * dt_s;
-    else
-        s_i_pos *= 0.95f; /* bleed when far */
-
-    s_i_pos = clampf(s_i_pos, -BALL_CTRL_I_LIM, BALL_CTRL_I_LIM);
-
-    rod_unsat =
-        BALL_CTRL_SIGN * (
-                        BALL_CTRL_KP_POS * e_mm
-                    + BALL_CTRL_KI_POS * s_i_pos
-                    - BALL_CTRL_KD_POS * s_vel_mm_s
-        );
-
-    rod_mm = clampf(rod_unsat, -rod_max, rod_max);
-
-    /* Anti-windup: undo the latest integral update while the output saturates. */
-    if ((rod_mm >= rod_max - 1e-3f && rod_unsat > rod_max) ||
-        (rod_mm <= -rod_max + 1e-3f && rod_unsat < -rod_max)) {
-        if (abs_e < BALL_CTRL_I_SEP_MM)
-            s_i_pos -= e_mm * dt_s;
-    }
-
-    s_rod_f = s_rod_f + out_a * (rod_mm - s_rod_f);
-    apply_rod((int32_t)(s_rod_f * 100.0f));
-}
-
 void BallCtrl_Update(void)
 {
-    ball_frame_t fr;
-    ball_setpoint_cmd_t sp;
+    ball_frame_t frame;
+    ball_setpoint_cmd_t setpoint;
     float dt_s;
-    float new_f;
-    float inst_v;
-    float prev_ball_f;
-    uint32_t now;
-    uint32_t dms;
 
-    if (VisionUart_TakeSetpoint(&sp) && sp.valid)
-        BallCtrl_SetTargetMm(sp.target_mm);
+    if (VisionUart_TakeSetpoint(&setpoint) && setpoint.valid)
+        BallCtrl_SetTargetMm(setpoint.target_mm);
 
     if (!s_en) {
         s_state = BALL_CTRL_STATE_IDLE;
@@ -283,69 +392,38 @@ void BallCtrl_Update(void)
 
     if (s_state == BALL_CTRL_STATE_LOST &&
         s_lost_ms >= (uint32_t)BALL_CTRL_LOST_DISABLE_MS &&
-        !s_coils_off) {
+        !s_coils_off)
         coils_off();
-    }
 
-    if (VisionUart_TakeBallFrame(&fr)) {
-        if (ball_frame_usable(&fr)) {
-            new_f = (float)ball_pos_to_mm_x100(fr.pos_mm);
-            now = s_ms_total;
-            if (s_have_ball) {
-                dms = now - s_last_frame_ms;
-                if (dms < 5u)
-                    dms = 5u;
-                if (dms > 200u)
-                    dms = 200u;
-                dt_s = (float)dms / 1000.0f;
-                prev_ball_f = s_ball_f;
-                s_ball_f = s_ball_f +
-                    BALL_CTRL_POS_ALPHA * (new_f - s_ball_f);
-                inst_v = ((s_ball_f - prev_ball_f) / 100.0f) / dt_s;
-                inst_v = clampf(inst_v, -300.0f, 300.0f);
-                s_vel_mm_s = s_vel_mm_s +
-                    BALL_CTRL_VEL_ALPHA * (inst_v - s_vel_mm_s);
-            } else {
-                s_ball_f = new_f;
-                s_vel_mm_s = 0.0f;
-            }
-            s_last_frame_ms = now;
-            s_ball_mm_x100 = (int32_t)s_ball_f;
-            s_have_ball = true;
+    if (VisionUart_TakeBallFrame(&frame)) {
+        if (ball_frame_usable(&frame)) {
+            s_bad_frames = 0u;
+            update_measurement(&frame, &dt_s);
             if (s_state == BALL_CTRL_STATE_LOST) {
                 s_state = BALL_CTRL_STATE_RUN;
-                s_lost_ms = 0;
-                reset_integrators();
+                s_lost_ms = 0u;
+                s_rod_applied = false;
+                s_rod_mm_x100 = 0;
+                reset_dynamic_state();
+                update_measurement(&frame, &dt_s);
                 coils_on();
             }
-        } else {
-            on_lost();
+            control_from_measurement(dt_s);
+        } else if (s_bad_frames < 255u) {
+            s_bad_frames++;
+            if (s_bad_frames > (uint8_t)BALL_CTRL_LOST_FRAME_GRACE)
+                enter_lost();
         }
     }
 
-    if (!VisionUart_BallLinkOk() ||
-        VisionUart_MsSinceBall() > (uint32_t)BALL_CTRL_LINK_TIMEOUT_MS) {
-        if (s_have_ball || s_state == BALL_CTRL_STATE_RUN ||
-            s_state == BALL_CTRL_STATE_SETTLED)
-            on_lost();
+    if (VisionUart_MsSinceBall() > (uint32_t)BALL_CTRL_LINK_TIMEOUT_MS) {
+        if (s_state != BALL_CTRL_STATE_LOST)
+            enter_lost();
         return;
     }
 
     if (!s_have_ball)
-    {
-        if (s_state == BALL_CTRL_STATE_LOST && !s_coils_off &&
-            s_ms_accum >= BALL_CTRL_DT_MS) {
-            s_ms_accum = 0;
-            s_rod_f = 0.0f;
-            apply_rod(0);
-        }
         return;
-    }
-
-    if (s_ms_accum < BALL_CTRL_DT_MS)
-        return;
-    s_ms_accum = 0;
-    control_step((float)BALL_CTRL_DT_MS / 1000.0f);
 }
 
 ball_ctrl_state_t BallCtrl_GetState(void)

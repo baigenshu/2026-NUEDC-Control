@@ -1,8 +1,9 @@
 /**
  * @file stepper.c
- * @brief TMC_A open-loop stepper with trapezoid accel (M5 leadscrew)
+ * @brief TMC_A open-loop stepper with trapezoid accel (crank-linkage boom)
  *
  * Tick: STEP_TIM 10 us. Each microstep = HIGH then LOW phase.
+ * Mechanical: motor crank → linkage → boom tilt (not leadscrew).
  * Speed profile: start at START_SPS, ramp to cruise, decelerate near target
  * and on reverse to cut lost-steps at high-frequency direction changes.
  */
@@ -181,16 +182,38 @@ static void arm_motion(int32_t target)
     DL_TimerG_startCounter(STEP_TIM_INST);
 }
 
-static int32_t um_to_steps(int32_t um)
+/* tilt_x100: 0.01 abstract unit → microsteps */
+static int32_t tilt_x100_to_steps(int32_t tilt_x100)
 {
-    int64_t num = (int64_t)um * (int64_t)STEPPER_STEPS_PER_REV;
-    return (int32_t)(num / (int64_t)STEPPER_LEAD_UM);
+    int64_t num = (int64_t)tilt_x100 * (int64_t)STEPPER_STEPS_PER_UNIT;
+    if (num >= 0)
+        return (int32_t)((num + 50) / 100);
+    return (int32_t)((num - 50) / 100);
 }
 
-static int32_t steps_to_um(int32_t steps)
+static int32_t steps_to_tilt_x100(int32_t steps)
 {
-    int64_t num = (int64_t)steps * (int64_t)STEPPER_LEAD_UM;
-    return (int32_t)(num / (int64_t)STEPPER_STEPS_PER_REV);
+    int64_t num = (int64_t)steps * 100;
+    if (num >= 0)
+        return (int32_t)((num + (int64_t)STEPPER_STEPS_PER_UNIT / 2) /
+                         (int64_t)STEPPER_STEPS_PER_UNIT);
+    return (int32_t)((num - (int64_t)STEPPER_STEPS_PER_UNIT / 2) /
+                     (int64_t)STEPPER_STEPS_PER_UNIT);
+}
+
+static int32_t deg_x100_to_steps(int32_t deg_x100)
+{
+    /* 1 microstep ≈ STEPPER_MOTOR_DEG_X100_PER_STEP (0.01°) */
+    if (deg_x100 >= 0)
+        return (int32_t)((deg_x100 + STEPPER_MOTOR_DEG_X100_PER_STEP / 2) /
+                         STEPPER_MOTOR_DEG_X100_PER_STEP);
+    return (int32_t)((deg_x100 - STEPPER_MOTOR_DEG_X100_PER_STEP / 2) /
+                     STEPPER_MOTOR_DEG_X100_PER_STEP);
+}
+
+static int32_t steps_to_deg_x100(int32_t steps)
+{
+    return steps * STEPPER_MOTOR_DEG_X100_PER_STEP;
 }
 
 void Stepper_Init(void)
@@ -309,34 +332,50 @@ uint32_t Stepper_GetAccel(void)
     return s_accel;
 }
 
-void Stepper_MoveUm(int32_t delta_um)
+void Stepper_MoveDeg_x100(int32_t delta_deg_x100)
 {
-    Stepper_MoveSteps(um_to_steps(delta_um));
+    Stepper_MoveSteps(deg_x100_to_steps(delta_deg_x100));
 }
 
-void Stepper_SetTargetUm(int32_t target_um)
+void Stepper_SetTargetDeg_x100(int32_t target_deg_x100)
 {
-    Stepper_SetTargetSteps(um_to_steps(target_um));
+    Stepper_SetTargetSteps(deg_x100_to_steps(target_deg_x100));
+}
+
+int32_t Stepper_GetPositionDeg_x100(void)
+{
+    return steps_to_deg_x100(s_pos);
 }
 
 void Stepper_MoveMm_x100(int32_t delta_mm_x100)
 {
-    Stepper_MoveUm(delta_mm_x100 * 10);
+    Stepper_MoveSteps(tilt_x100_to_steps(delta_mm_x100));
 }
 
 void Stepper_SetTargetMm_x100(int32_t target_mm_x100)
 {
-    Stepper_SetTargetUm(target_mm_x100 * 10);
-}
-
-int32_t Stepper_GetPositionUm(void)
-{
-    return steps_to_um(s_pos);
+    Stepper_SetTargetSteps(tilt_x100_to_steps(target_mm_x100));
 }
 
 int32_t Stepper_GetPositionMm_x100(void)
 {
-    return steps_to_um(s_pos) / 10;
+    return steps_to_tilt_x100(s_pos);
+}
+
+/* 兼容旧 um API：按 0.01 unit * 10 解释 */
+void Stepper_MoveUm(int32_t delta_um)
+{
+    Stepper_MoveMm_x100(delta_um / 10);
+}
+
+void Stepper_SetTargetUm(int32_t target_um)
+{
+    Stepper_SetTargetMm_x100(target_um / 10);
+}
+
+int32_t Stepper_GetPositionUm(void)
+{
+    return Stepper_GetPositionMm_x100() * 10;
 }
 
 uint32_t Stepper_GetPulseCount(void)
