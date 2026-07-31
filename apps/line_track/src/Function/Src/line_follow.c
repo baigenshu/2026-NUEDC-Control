@@ -127,9 +127,17 @@ void LineFollow_Update(void)
         }
     }
 
-    /* ---- 2. 加权线位置（丢线则保持上次误差）---- */
+    /* ---- 2. 加权线位置（丢线则向最后所见方向外推，见 LF_LOST_STEP）---- */
     if (s_active == 0u) {
-        s_error = s_last_error;
+        if (s_last_error < 0.f) {            /* 线在左 p1-p2 间隙 → 向 W0 外推 */
+            s_error = s_last_error - LF_LOST_STEP;
+            if (s_error < LF_W0) s_error = LF_W0;
+        } else if (s_last_error > 0.f) {     /* 线在右 p3-p4 间隙 → 向 W3 外推 */
+            s_error = s_last_error + LF_LOST_STEP;
+            if (s_error > LF_W3) s_error = LF_W3;
+        } else {
+            s_error = 0.f;                   /* 方向未定（启动/居中丢线）*/
+        }
     } else {
         sum = 0.f;
         for (i = 0; i < IR4_CH_COUNT; ++i) {
