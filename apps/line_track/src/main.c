@@ -3,14 +3,15 @@
  * @brief 四路红外巡线 · 四轮独立速度 PID 闭环
  *
  * KEY_RUN PA17：巡线开/关
- * KEY_SPD PA15：base speed 0→SPD1→SPD2→SPD3→0
+ * KEY_SPD PA15：模式 STOP→M1→M2→M3→STOP
+ *               M1=三档持续 / M2=三档15s停 / M3=二档7s停 / STOP=不动
  * IR p1..p4 = PB19/PB17/PA16/PA14（G1–G4）
  *
  * OLED：
  *   L1  SPD:+xxxx
  *   L2  IR:xxxx E:±xx
  *   L3  A:+xxx B:+xxx
- *   L4  TRK / OFF Gx  T:xxx.xx   (RUN 键计时)
+ *   L4  TRK / OFF Mx  T:xxx.xx   (RUN 键计时)
  */
 #include "ti_msp_dl_config.h"
 #include "motor.h"
@@ -40,8 +41,20 @@
 #define HB_PERIOD_MS 1000u
 #endif
 
-static const int16_t s_gears[SPD_GEAR_COUNT] = {
-    SPD_GEAR_0, SPD_GEAR_1, SPD_GEAR_2, SPD_GEAR_3,
+/* 运行模式：STOP + 三种循迹模式（KEY_SPD 循环）。timeout_ms=0 不自动停 */
+typedef struct {
+    int16_t  spd;         /* 基速 pulses/10ms */
+    uint32_t timeout_ms;  /* 0 = 不自动停 */
+} run_mode_t;
+
+#define MODE_COUNT  (4)
+#define MODE_STOP   (0)
+
+static const run_mode_t s_modes[MODE_COUNT] = {
+    { SPD_GEAR_0, 0u      },  /* M0 STOP: 不动        */
+    { SPD_GEAR_3, 0u      },  /* M1: 三档, 持续        */
+    { SPD_GEAR_3, 15000u  },  /* M2: 三档, 15s 自动停  */
+    { SPD_GEAR_2, 7000u   },  /* M3: 二档, 7s  自动停  */
 };
 
 static uint32_t s_ms;
@@ -50,7 +63,7 @@ static uint32_t s_cycle_accum;
 
 static int32_t s_ea, s_eb, s_ec, s_ed;
 static int16_t s_spd;
-static uint8_t s_gear_idx;
+static uint8_t s_mode_idx;
 static uint8_t s_ui_dirty;
 
 /* RUN 键计时器：按下启动计时 / 再按停止并显示 / 再启动清零重计 */
@@ -85,36 +98,48 @@ static uint32_t millis(void)
     return s_ms;
 }
 
+static void start_run(uint32_t now)
+{
+    LineFollow_SetBaseSpd(s_spd);
+    LineFollow_SetEnable(true);
+    /* 启动：清零并开始计时 */
+    s_timer_running    = 1u;
+    s_timer_start_ms   = now;
+    s_timer_elapsed_ms = 0u;
+}
+
+static void stop_run(uint32_t now)
+{
+    /* 停止：冻结用时并打印 */
+    LineFollow_SetEnable(false);
+    s_timer_running    = 0u;
+    s_timer_elapsed_ms = now - s_timer_start_ms;
+    UartDebug_Printf("LAP %lu.%02lu s\n",
+                     (unsigned long)(s_timer_elapsed_ms / 1000u),
+                     (unsigned long)((s_timer_elapsed_ms % 1000u) / 10u));
+}
+
 static void on_key_run(uint32_t now)
 {
-    bool on = !LineFollow_IsEnabled();
-    LineFollow_SetBaseSpd(s_spd);
-    LineFollow_SetEnable(on);
-
-    if (on) {
-        /* 启动：清零并开始计时 */
-        s_timer_running    = 1u;
-        s_timer_start_ms   = now;
-        s_timer_elapsed_ms = 0u;
+    if (!LineFollow_IsEnabled()) {
+        start_run(now);
+        UartDebug_Printf("KEY_RUN -> ON mode=%u spd=%d\n",
+                         (unsigned)s_mode_idx, (int)s_spd);
     } else {
-        /* 停止：冻结用时并打印 */
-        s_timer_running    = 0u;
-        s_timer_elapsed_ms = now - s_timer_start_ms;
-        UartDebug_Printf("LAP %lu.%02lu s\n",
-                         (unsigned long)(s_timer_elapsed_ms / 1000u),
-                         (unsigned long)((s_timer_elapsed_ms % 1000u) / 10u));
+        stop_run(now);
+        UartDebug_Printf("KEY_RUN -> OFF (manual)\n");
     }
-
-    UartDebug_Printf("KEY_RUN -> %s spd=%d\n", on ? "ON" : "OFF", (int)s_spd);
     s_ui_dirty = 1u;
 }
 
 static void on_key_spd(void)
 {
-    s_gear_idx = (uint8_t)((s_gear_idx + 1u) % SPD_GEAR_COUNT);
-    s_spd = s_gears[s_gear_idx];
+    s_mode_idx = (uint8_t)((s_mode_idx + 1u) % MODE_COUNT);
+    s_spd = s_modes[s_mode_idx].spd;
     LineFollow_SetBaseSpd(s_spd);
-    UartDebug_Printf("KEY_SPD -> g=%u spd=%d\n", (unsigned)s_gear_idx, (int)s_spd);
+    UartDebug_Printf("KEY_SPD -> mode=%u spd=%d timeout=%lu ms\n",
+                     (unsigned)s_mode_idx, (int)s_spd,
+                     (unsigned long)s_modes[s_mode_idx].timeout_ms);
     s_ui_dirty = 1u;
 }
 
@@ -139,7 +164,7 @@ static void ui_draw_static(void)
 
 static const char *state_text(lf_state_t st)
 {
-    return (st == LF_STATE_TRACK) ? "TRK G" : "OFF G";
+    return (st == LF_STATE_TRACK) ? "TRK M" : "OFF M";
 }
 
 static void ui_refresh(void)
@@ -178,7 +203,7 @@ static void ui_refresh(void)
     OLED_ShowSignedNum(2, 11, err, 2);
 
     OLED_ShowString(4, 1, state_text(LineFollow_GetState()));
-    OLED_ShowNum(4, 7, (uint32_t)s_gear_idx, 1);
+    OLED_ShowNum(4, 7, (uint32_t)s_mode_idx, 1);
 
     /* L4 末尾：计时 T:xxx.xx (s) */
     {
@@ -201,8 +226,8 @@ int main(void)
     uint32_t now;
     uint32_t hb_cnt;
 
-    s_gear_idx = 1;
-    s_spd = s_gears[s_gear_idx];
+    s_mode_idx = MODE_STOP;
+    s_spd = s_modes[s_mode_idx].spd;
     s_ui_dirty = 0;
     hb_cnt = 0;
 
@@ -235,6 +260,15 @@ int main(void)
         if (Key_PollPress(KEY_ID_SPD, now))
             on_key_spd();
 
+        /* 模式超时自动停（M2=15s, M3=7s；M0/M1 timeout=0 不触发）*/
+        if (s_timer_running &&
+            s_modes[s_mode_idx].timeout_ms != 0u &&
+            (now - s_timer_start_ms) >= s_modes[s_mode_idx].timeout_ms) {
+            stop_run(now);
+            UartDebug_Printf("AUTO-STOP mode=%u\n", (unsigned)s_mode_idx);
+            s_ui_dirty = 1u;
+        }
+
         if ((now - t_prev) >= SAMPLE_MS) {
             t_prev = now;
             LineFollow_Update();
@@ -253,10 +287,10 @@ int main(void)
             t_hb = now;
             hb_cnt++;
             UartDebug_Printf(
-                "HB #%lu en=%d g=%u spd=%d m=%02X e=%ld st=%d "
+                "HB #%lu en=%d mode=%u spd=%d m=%02X e=%ld st=%d "
                 "enc=%ld,%ld,%ld,%ld\n",
                 (unsigned long)hb_cnt,
-                LineFollow_IsEnabled() ? 1 : 0, (unsigned)s_gear_idx,
+                LineFollow_IsEnabled() ? 1 : 0, (unsigned)s_mode_idx,
                 (int)s_spd, (unsigned)LineFollow_GetMask(),
                 (long)(LineFollow_GetError() * 10.0f),  /* e×10，单位0.1 */
                 (int)LineFollow_GetState(),

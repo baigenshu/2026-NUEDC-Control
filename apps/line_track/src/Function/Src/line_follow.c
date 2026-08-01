@@ -146,10 +146,8 @@ void LineFollow_Update(void)
     }
 
     /* ---- 3. 位置 PID（位置式，积分限幅）---- */
-    if (s_active != 0u) {
-        s_integral += s_error;            /* 线可见才累积；丢线冻结，防外推±LF_LOST_ERR 灌爆积分 */
-    }
-    if (s_integral >  LF_I_MAX) s_integral =  LF_I_MAX;
+    s_integral += s_error;
+    if (s_integral > LF_I_MAX)  s_integral = LF_I_MAX;
     if (s_integral < -LF_I_MAX) s_integral = -LF_I_MAX;
 
     deriv = s_error - s_last_error;
