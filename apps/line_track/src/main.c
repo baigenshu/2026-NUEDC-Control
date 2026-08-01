@@ -53,7 +53,7 @@ typedef struct {
 static const run_mode_t s_modes[MODE_COUNT] = {
     { SPD_GEAR_0, 0u      },  /* M0 STOP: 不动        */
     { SPD_GEAR_3, 0u      },  /* M1: 三档, 持续        */
-    { SPD_GEAR_3, 15000u  },  /* M2: 三档, 15s 自动停  */
+    { SPD_GEAR_3, 17500u  },  /* M2: 三档, 15s 自动停  */
     { SPD_GEAR_2, 7000u   },  /* M3: 二档, 7s  自动停  */
 };
 
