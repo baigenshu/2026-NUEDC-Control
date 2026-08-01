@@ -3,8 +3,8 @@
  * @brief 四路红外巡线 · 四轮独立速度 PID 闭环
  *
  * KEY_RUN PA17：巡线开/关
- * KEY_SPD PA15：模式 STOP→M1→M2→M3→STOP
- *               M1=三档持续 / M2=三档15s停 / M3=二档7s停 / STOP=不动
+ * KEY_SPD PA15：模式 STOP→M1→M2→M3→M4→STOP
+ *               M1=三档持续 / M2=三档17s停 / M3=二档8s缓启停 / M4=一档30s缓启停 / STOP=不动
  * IR p1..p4 = PB19/PB17/PA16/PA14（G1–G4）
  *
  * OLED：
@@ -41,20 +41,24 @@
 #define HB_PERIOD_MS 1000u
 #endif
 
-/* 运行模式：STOP + 三种循迹模式（KEY_SPD 循环）。timeout_ms=0 不自动停 */
+/* 运行模式：STOP + 四种循迹模式（KEY_SPD 循环）。timeout_ms=0 不自动停。
+ * ramp_up_ms/ramp_down_ms 非零 → 梯形速度曲线（缓启缓停），自动适应 timeout。*/
 typedef struct {
-    int16_t  spd;         /* 基速 pulses/10ms */
-    uint32_t timeout_ms;  /* 0 = 不自动停 */
+    int16_t  spd;          /* 基速 pulses/10ms */
+    uint32_t timeout_ms;   /* 0 = 不自动停 */
+    uint32_t ramp_up_ms;   /* 加速斜坡时长，0 = 瞬时启动 */
+    uint32_t ramp_down_ms; /* 减速斜坡时长，0 = 瞬时停止 */
 } run_mode_t;
 
-#define MODE_COUNT  (4)
+#define MODE_COUNT  (5)
 #define MODE_STOP   (0)
 
 static const run_mode_t s_modes[MODE_COUNT] = {
-    { SPD_GEAR_0, 0u      },  /* M0 STOP: 不动        */
-    { SPD_GEAR_3, 0u      },  /* M1: 三档, 持续        */
-    { SPD_GEAR_3, 17500u  },  /* M2: 三档, 15s 自动停  */
-    { SPD_GEAR_2, 7000u   },  /* M3: 二档, 7s  自动停  */
+    { SPD_GEAR_0, 0u,     0u,    0u    },  /* M0 STOP: 不动                  */
+    { SPD_GEAR_3, 0u,     0u,    0u    },  /* M1: 三档, 持续                  */
+    { SPD_GEAR_3, 17000u, 0u,    0u    },  /* M2: 三档, 17s 自动停            */
+    { SPD_GEAR_2, 7000u,  2000u, 2000u },  /* M3: 二档, 8s, 2s斜坡缓启停      */
+    { SPD_GEAR_1, 30000u, 5000u, 5000u },  /* M4: 一档, 30s, 5s斜坡缓启停     */
 };
 
 static uint32_t s_ms;
@@ -62,7 +66,8 @@ static uint32_t s_last_systick;
 static uint32_t s_cycle_accum;
 
 static int32_t s_ea, s_eb, s_ec, s_ed;
-static int16_t s_spd;
+static int16_t s_spd;        /* 当前模式目标基速（pulses/10ms）*/
+static int16_t s_cur_spd;    /* 当前实际下发给循迹的基速（M3 斜坡时随时间变化）*/
 static uint8_t s_mode_idx;
 static uint8_t s_ui_dirty;
 
@@ -98,9 +103,43 @@ static uint32_t millis(void)
     return s_ms;
 }
 
+/*
+ * 通用梯形斜坡基速：按启动后经过时间生成
+ *   0 .. ramp_up           线性加速 0 → spd
+ *   ramp_up .. timeout-dn  巡航 spd
+ *   timeout-dn .. timeout  线性减速 spd → 0
+ *   ≥ timeout               0（由 timeout 触发 stop_run 收尾，基速已为 0，无急停）
+ * 仅对 ramp_up_ms != 0 的模式调用。
+ */
+static int16_t ramp_speed(uint32_t elapsed, uint8_t idx)
+{
+    const run_mode_t *m = &s_modes[idx];
+    float    tgt = (float)m->spd;
+    uint32_t up  = m->ramp_up_ms;
+    uint32_t dn  = m->ramp_down_ms;
+    uint32_t total     = m->timeout_ms;
+    uint32_t cruise_end = total - dn;   /* 巡航区结束 = 减速区开始 */
+    float    v;
+
+    if (elapsed >= total) {
+        v = 0.f;
+    } else if (elapsed >= cruise_end) {
+        v = tgt * (1.f - (float)(elapsed - cruise_end) / (float)dn);
+    } else if (elapsed >= up) {
+        v = tgt;
+    } else {
+        v = tgt * (float)elapsed / (float)up;
+    }
+    if (v < 0.f) v = 0.f;
+    if (v > tgt) v = tgt;
+    return (int16_t)v;
+}
+
 static void start_run(uint32_t now)
 {
-    LineFollow_SetBaseSpd(s_spd);
+    /* 带斜坡的模式从 0 起步由斜坡推上去；其余直接给目标基速 */
+    s_cur_spd = (s_modes[s_mode_idx].ramp_up_ms != 0u) ? 0 : s_spd;
+    LineFollow_SetBaseSpd(s_cur_spd);
     LineFollow_SetEnable(true);
     /* 启动：清零并开始计时 */
     s_timer_running    = 1u;
@@ -114,6 +153,7 @@ static void stop_run(uint32_t now)
     LineFollow_SetEnable(false);
     s_timer_running    = 0u;
     s_timer_elapsed_ms = now - s_timer_start_ms;
+    s_cur_spd = 0;
     UartDebug_Printf("LAP %lu.%02lu s\n",
                      (unsigned long)(s_timer_elapsed_ms / 1000u),
                      (unsigned long)((s_timer_elapsed_ms % 1000u) / 10u));
@@ -176,7 +216,7 @@ static void ui_refresh(void)
     int32_t  b = clamp_show(s_eb, 999);
     int32_t  c = clamp_show(s_ec, 999);
     int32_t  d = clamp_show(s_ed, 999);
-    int32_t  spd = (int32_t)s_spd;
+    int32_t  spd = (int32_t)s_cur_spd;
     char     bits[5];
     uint8_t  i;
 
@@ -228,6 +268,7 @@ int main(void)
 
     s_mode_idx = MODE_STOP;
     s_spd = s_modes[s_mode_idx].spd;
+    s_cur_spd = 0;
     s_ui_dirty = 0;
     hb_cnt = 0;
 
@@ -260,7 +301,7 @@ int main(void)
         if (Key_PollPress(KEY_ID_SPD, now))
             on_key_spd();
 
-        /* 模式超时自动停（M2=15s, M3=7s；M0/M1 timeout=0 不触发）*/
+        /* 模式超时自动停（M2=17s, M3=8s, M4=30s；M0/M1 timeout=0 不触发）*/
         if (s_timer_running &&
             s_modes[s_mode_idx].timeout_ms != 0u &&
             (now - s_timer_start_ms) >= s_modes[s_mode_idx].timeout_ms) {
@@ -271,6 +312,14 @@ int main(void)
 
         if ((now - t_prev) >= SAMPLE_MS) {
             t_prev = now;
+            /* 运行中按模式刷新基速：带斜坡的模式走梯形曲线，其余恒定 */
+            if (s_timer_running) {
+                if (s_modes[s_mode_idx].ramp_up_ms != 0u)
+                    s_cur_spd = ramp_speed(now - s_timer_start_ms, s_mode_idx);
+                else
+                    s_cur_spd = s_spd;
+                LineFollow_SetBaseSpd(s_cur_spd);
+            }
             LineFollow_Update();
             LineFollow_GetEncoderDeltas(&s_ea, &s_eb, &s_ec, &s_ed);
         }
@@ -291,7 +340,7 @@ int main(void)
                 "enc=%ld,%ld,%ld,%ld\n",
                 (unsigned long)hb_cnt,
                 LineFollow_IsEnabled() ? 1 : 0, (unsigned)s_mode_idx,
-                (int)s_spd, (unsigned)LineFollow_GetMask(),
+                (int)s_cur_spd, (unsigned)LineFollow_GetMask(),
                 (long)(LineFollow_GetError() * 10.0f),  /* e×10，单位0.1 */
                 (int)LineFollow_GetState(),
                 (long)s_ea, (long)s_eb, (long)s_ec, (long)s_ed);

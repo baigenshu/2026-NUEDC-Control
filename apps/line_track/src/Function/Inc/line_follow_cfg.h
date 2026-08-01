@@ -13,8 +13,8 @@
  * 速度档位 — 编码器脉冲/控制周期（10ms）
  * ================================================================ */
 #define SPD_GEAR_0                     (0)
-#define SPD_GEAR_1                     (5)
-#define SPD_GEAR_2                     (15)
+#define SPD_GEAR_1                     (14)
+#define SPD_GEAR_2                     (18)
 #define SPD_GEAR_3                     (20)
 #define SPD_GEAR_COUNT                 (4)
 
