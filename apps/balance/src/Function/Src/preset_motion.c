@@ -60,39 +60,54 @@ static void start_override_phase(preset_motion_state_t state, uint32_t now_ms,
     BallCtrl_SetCommandOverrideMm_x100(rod_mm_x100);
 }
 
-static void start_final_settle(uint32_t now_ms)
-{
-    BallCtrl_SetTargetMm_x100(PRESET_MOTION_NEGATIVE_TARGET_MM_X100);
-    BallCtrl_ClearCommandOverride();
-    restore_stepper_dynamics();
-    s_phase_start_ms = now_ms;
-    s_state = PRESET_MOTION_FINAL_SETTLE;
-}
-
 static void update_negative_approach_command(void)
 {
     float remaining_mm = ((float)BallCtrl_GetBallMm_x100() -
-        (float)PRESET_MOTION_FINAL_PID_ENTRY_MM_X100) / 100.0f;
+        (float)PRESET_MOTION_NEGATIVE_STOP_TARGET_MM_X100) / 100.0f;
+    float stop_tolerance_mm =
+        (float)PRESET_MOTION_NEGATIVE_STOP_TOLERANCE_MM_X100 / 100.0f;
     float forward_speed_mm_s = -BallCtrl_GetVelocityMm_s();
     float desired_speed_mm_s;
     float drive_mm_x100;
 
-    if (remaining_mm <= 0.0f)
-        desired_speed_mm_s = 0.0f;
-    else
-        desired_speed_mm_s = clampf(
-            remaining_mm / PRESET_MOTION_NEGATIVE_APPROACH_TIME_S,
-            0.0f,
-            PRESET_MOTION_NEGATIVE_APPROACH_MAX_SPEED_MM_S);
+    if (remaining_mm < -stop_tolerance_mm) {
+        BallCtrl_SetCommandOverrideMm_x100(
+            PRESET_MOTION_NEGATIVE_BRAKE_ROD_MM_X100);
+        return;
+    }
 
-    drive_mm_x100 = PRESET_MOTION_NEGATIVE_SPEED_FEEDFORWARD_ROD_MM_X100 +
+    desired_speed_mm_s = clampf(
+        remaining_mm / PRESET_MOTION_NEGATIVE_APPROACH_TIME_S,
+        -PRESET_MOTION_NEGATIVE_APPROACH_MAX_SPEED_MM_S,
+        PRESET_MOTION_NEGATIVE_APPROACH_MAX_SPEED_MM_S);
+
+    drive_mm_x100 = desired_speed_mm_s > 0.0f ?
+        PRESET_MOTION_NEGATIVE_SPEED_FEEDFORWARD_ROD_MM_X100 : 0.0f;
+    drive_mm_x100 +=
         PRESET_MOTION_NEGATIVE_SPEED_KP_ROD_PER_MM_S *
             (desired_speed_mm_s - forward_speed_mm_s);
+    if (remaining_mm > stop_tolerance_mm &&
+        forward_speed_mm_s <
+            PRESET_MOTION_NEGATIVE_APPROACH_MIN_PROGRESS_SPEED_MM_S &&
+        drive_mm_x100 <
+            PRESET_MOTION_NEGATIVE_APPROACH_MAX_DRIVE_ROD_MM_X100)
+        drive_mm_x100 = PRESET_MOTION_NEGATIVE_APPROACH_MAX_DRIVE_ROD_MM_X100;
     drive_mm_x100 = clampf(
         drive_mm_x100,
         -(float)PRESET_MOTION_NEGATIVE_BRAKE_ROD_MM_X100,
-        -(float)PRESET_MOTION_NEGATIVE_PUSH_ROD_MM_X100);
+        PRESET_MOTION_NEGATIVE_APPROACH_MAX_DRIVE_ROD_MM_X100);
     BallCtrl_SetCommandOverrideMm_x100(-round_to_i32(drive_mm_x100));
+}
+
+static bool in_negative_stop_window(void)
+{
+    float position_error_mm = ((float)BallCtrl_GetBallMm_x100() -
+        (float)PRESET_MOTION_NEGATIVE_STOP_TARGET_MM_X100) / 100.0f;
+
+    return absf(position_error_mm) <=
+            (float)PRESET_MOTION_NEGATIVE_STOP_TOLERANCE_MM_X100 / 100.0f &&
+        absf(BallCtrl_GetVelocityMm_s()) <=
+            PRESET_MOTION_NEGATIVE_STOP_SPEED_MM_S;
 }
 
 static int32_t predicted_position_mm_x100(void)
@@ -212,19 +227,17 @@ void PresetMotion_Update(uint32_t now_ms)
 
     if (s_state == PRESET_MOTION_NEGATIVE_BRAKE) {
         update_negative_approach_command();
-        if (BallCtrl_GetBallMm_x100() <=
-                PRESET_MOTION_FINAL_PID_ENTRY_MM_X100 &&
-            absf(BallCtrl_GetVelocityMm_s()) <=
-                PRESET_MOTION_FINAL_PID_ENTRY_SPEED_MM_S)
-            start_final_settle(now_ms);
+        if (in_negative_stop_window()) {
+            s_phase_start_ms = now_ms;
+            s_state = PRESET_MOTION_FINAL_SETTLE;
+        }
         return;
     }
 
     if (s_state == PRESET_MOTION_FINAL_SETTLE) {
-        if (BallCtrl_IsSettled()) {
-            s_state = s_positive_waypoint_ok ? PRESET_MOTION_COMPLETE :
-                PRESET_MOTION_TIMEOUT;
-            restore_stepper_dynamics();
+        update_negative_approach_command();
+        if (!in_negative_stop_window()) {
+            s_state = PRESET_MOTION_NEGATIVE_BRAKE;
         }
         return;
     }
