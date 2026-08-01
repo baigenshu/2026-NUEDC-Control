@@ -20,6 +20,7 @@ typedef enum {
 static volatile int32_t  s_pos;
 static volatile int32_t  s_target;
 static volatile uint32_t s_cruise_sps;
+static volatile uint32_t s_start_sps;
 static volatile uint32_t s_cur_sps;
 static volatile uint32_t s_accel;
 static volatile uint32_t s_period_ticks;
@@ -86,7 +87,7 @@ static uint32_t steps_to_stop(uint32_t sps)
 
     if (a < 1u)
         a = 1u;
-    if (sps <= STEPPER_START_SPS)
+    if (sps <= s_start_sps)
         return 1u;
     v2 = (uint64_t)sps * (uint64_t)sps;
     return (uint32_t)(v2 / (2ull * (uint64_t)a)) + 1u;
@@ -111,14 +112,14 @@ static void update_speed_profile(void)
 
     if ((uint32_t)remain <= need_stop) {
         /* decelerate toward START */
-        if (sps > STEPPER_START_SPS) {
+        if (sps > s_start_sps) {
             uint32_t dec = a / (sps > 0u ? sps : 1u);
             if (dec < 1u)
                 dec = 1u;
-            if (sps > STEPPER_START_SPS + dec)
+            if (sps > s_start_sps + dec)
                 sps -= dec;
             else
-                sps = STEPPER_START_SPS;
+                sps = s_start_sps;
         }
     } else if (sps < cruise) {
         uint32_t inc = a / (sps > 0u ? sps : 1u);
@@ -171,8 +172,8 @@ static void arm_motion(int32_t target)
     apply_dir_pin(s_move_dir);
 
     /* fresh move: start from low speed unless already spinning same way */
-    if (!s_busy || s_cur_sps < STEPPER_START_SPS)
-        apply_period_from_sps(STEPPER_START_SPS);
+    if (!s_busy || s_cur_sps < s_start_sps)
+        apply_period_from_sps(s_start_sps);
     else
         apply_period_from_sps(s_cur_sps);
 
@@ -225,6 +226,7 @@ void Stepper_Init(void)
     s_pos = 0;
     s_target = 0;
     s_cruise_sps = STEPPER_DEFAULT_SPS;
+    s_start_sps = STEPPER_START_SPS;
     s_accel = STEPPER_ACCEL_SPS2;
     s_phase = STEP_PHASE_IDLE;
     s_busy = false;
@@ -232,7 +234,7 @@ void Stepper_Init(void)
     s_tick_cnt = 0;
     s_pulse_count = 0;
     s_move_dir = 0;
-    apply_period_from_sps(STEPPER_START_SPS);
+    apply_period_from_sps(s_start_sps);
 
     DL_GPIO_clearPins(GPIO_STEPPER_PORT, GPIO_STEPPER_STEP_PIN | GPIO_STEPPER_DIR_PIN);
     DL_GPIO_setPins(GPIO_STEPPER_PORT, GPIO_STEPPER_EN_PIN);
@@ -275,7 +277,7 @@ void Stepper_EmergencyStop(void)
 {
     Stepper_Stop();
     Stepper_SetEnable(false);
-    apply_period_from_sps(STEPPER_START_SPS);
+    apply_period_from_sps(s_start_sps);
 }
 
 void Stepper_MoveSteps(int32_t delta_steps)
@@ -322,6 +324,16 @@ uint32_t Stepper_GetSpeedSps(void)
 uint32_t Stepper_GetCurrentSps(void)
 {
     return s_cur_sps;
+}
+
+void Stepper_SetStartSps(uint32_t sps)
+{
+    s_start_sps = clampu(sps, 1u, STEPPER_MAX_SPS);
+}
+
+uint32_t Stepper_GetStartSps(void)
+{
+    return s_start_sps;
 }
 
 void Stepper_SetAccel(uint32_t sps2)
@@ -429,7 +441,7 @@ void Stepper_OnTimerTick(void)
             s_phase = STEP_PHASE_IDLE;
             s_move_dir = 0;
             DL_GPIO_clearPins(GPIO_STEPPER_PORT, GPIO_STEPPER_STEP_PIN);
-            apply_period_from_sps(STEPPER_START_SPS);
+            apply_period_from_sps(s_start_sps);
             DL_TimerG_stopCounter(STEP_TIM_INST);
             return;
         }
@@ -439,14 +451,14 @@ void Stepper_OnTimerTick(void)
             int8_t nd = (s_target > s_pos) ? 1 : -1;
             if (nd != s_move_dir) {
                 /* Reverse only after reaching the low-speed floor. */
-                if (s_cur_sps > STEPPER_START_SPS) {
+                if (s_cur_sps > s_start_sps) {
                     uint32_t dec = s_accel / (s_cur_sps > 0u ? s_cur_sps : 1u);
                     if (dec < 1u)
                         dec = 1u;
-                    if (s_cur_sps > STEPPER_START_SPS + dec)
+                    if (s_cur_sps > s_start_sps + dec)
                         apply_period_from_sps(s_cur_sps - dec);
                     else
-                        apply_period_from_sps(STEPPER_START_SPS);
+                        apply_period_from_sps(s_start_sps);
                     s_phase = STEP_PHASE_HIGH;
                     return;
                 }

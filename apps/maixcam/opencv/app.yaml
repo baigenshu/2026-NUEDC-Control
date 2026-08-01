@@ -1,10 +1,10 @@
 id: ball_opencv
 name: Ball OpenCV
 name[zh]: 钢珠OpenCV
-version: 1.4.9
+version: 1.4.14
 author: nuedc
-desc: Reuse/skip WiFi + OpenCV ball UART 0x02/0x12 + menu + MJPEG when online
-desc[zh]: 复用/扫码/跳过WiFi，凹槽钢珠UART对接balance，Menu折叠，有网才MJPEG
+desc: OpenCV ball UART 0x02/0x13 controls + menu + MJPEG when online
+desc[zh]: OpenCV钢珠检测，四键控制balance主控
 exclude:
   - .vscode
   - dist

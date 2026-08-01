@@ -23,7 +23,11 @@ extern "C" {
 #define BALL_FRAME_TYPE             (0x02u)   /* 球位；0x01=云台红点，本板忽略 */
 #define BALL_FRAME_TYPE_TRACK       (0x01u)
 #define BALL_FRAME_TYPE_SETPOINT    (0x12u)   /* 停球定点命令，布局见 vision_proto */
-#define BALL_FRAME_TYPE_CONTROL     (0x13u)   /* 启停：flags/action=0 停止，1 校零启动 */
+#define BALL_FRAME_TYPE_CONTROL     (0x13u)   /* 控制：action 在 flags 字节 */
+
+#define BALL_CONTROL_ACTION_RESET   (0u)      /* 停止、释放电机、恢复默认目标 */
+#define BALL_CONTROL_ACTION_START   (1u)      /* 机械置零后在 O 点普通平衡 */
+#define BALL_CONTROL_ACTION_PRESET  (2u)      /* 0 → +50 → -50 mm 预设运动 */
 
 #define BALL_FRAME_LEN              (13u)
 #define BALL_FRAME_BODY_LEN         (10u)     /* type..mode，不含 magic/csum */

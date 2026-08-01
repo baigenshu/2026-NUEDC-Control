@@ -38,6 +38,9 @@ void     Stepper_SetSpeedSps(uint32_t sps);
 uint32_t Stepper_GetSpeedSps(void);
 uint32_t Stepper_GetCurrentSps(void);
 
+void     Stepper_SetStartSps(uint32_t sps);
+uint32_t Stepper_GetStartSps(void);
+
 void     Stepper_SetAccel(uint32_t sps2);
 uint32_t Stepper_GetAccel(void);
 

@@ -59,10 +59,10 @@ static bool parse_control(const uint8_t *raw, ball_control_cmd_t *out)
 {
     if (!raw || !out || raw[2] != BALL_FRAME_TYPE_CONTROL)
         return false;
-    if (!frame_checksum_ok(raw) || raw[3] > 1u)
+    if (!frame_checksum_ok(raw) || raw[3] > BALL_CONTROL_ACTION_PRESET)
         return false;
 
-    out->start = raw[3] == 1u;
+    out->action = raw[3];
     out->valid = true;
     return true;
 }

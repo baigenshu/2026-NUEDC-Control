@@ -6,8 +6,8 @@ MaixCAM：OpenCV 钢珠位置 → UART → balance 摆杆主控（闭环停球�
 
 帧 13B 小端：
   0x02 球位：AA 55 | 02 | flags | pos_mm i16 | cx i16 | cy i16 | conf | mode | csum
-  0x12 定点：AA 55 | 12 | 00 | target_mm i16 | pad×6 | csum
-  pos/target = 整 mm；csum = sum(body)&0xFF
+    0x13 控制：AA 55 | 13 | action | pad×8 | csum
+    pos = 整 mm；action：0 Reset，1 Start，2 ±5 预设；csum = sum(body)&0xFF
 
 WiFi：已连复用 / 未连扫码可 Skip；无网禁 MJPEG；Menu→WiFi 可重连
 MJPEG：http://<IP>:8000/stream
@@ -42,7 +42,11 @@ except Exception as e:
 # ---------- 协议 / 相机 ----------
 ENABLE_UART = True
 PROTO_MAGIC0, PROTO_MAGIC1 = 0xAA, 0x55
-PROTO_TYPE_BALL, PROTO_TYPE_SETPOINT = 0x02, 0x12
+PROTO_TYPE_BALL, PROTO_TYPE_CONTROL = 0x02, 0x13
+CONTROL_ACTION_RESET = 0
+CONTROL_ACTION_START = 1
+CONTROL_ACTION_PRESET = 2
+CONTROL_REPEAT = 3
 PROTO_FLAG_FOUND = 0x01
 CONF_MIN = 30                 # 与 MCU BALL_CONF_MIN 一致
 # 球位发送：与检测同频（每主循环 1 包）。>0 时为最小间隔 ms（旧行为节流）
@@ -52,6 +56,8 @@ CAM_W, CAM_H = 320, 240
 
 # ---------- WiFi / MJPEG ----------
 WIFI_CONNECT_TIMEOUT = 60
+WIFI_IP_READY_TIMEOUT = 5
+WIFI_IP_POLL_MS = 250
 ENABLE_MJPEG = True
 HTTP_PORT = 8000
 JPEG_QUALITY = 45
@@ -90,13 +96,11 @@ _TEXT_WH_CACHE = {}
 _PROJ_KERNEL = None
 _PROJ_WIN = 0
 
-# 凹槽 ROI（已标定，勿改）
-ROI_X, ROI_Y, ROI_W, ROI_H = 36, 128, 256, 15
+# 凹槽 ROI
+ROI_X, ROI_Y, ROI_W, ROI_H = 34, 126, 258, 12
 ROI = [ROI_X, ROI_Y, ROI_W, ROI_H]
 BAR_LEN_MM = 234.0
 O_OFFSET_PX = ROI_W // 2
-SP_MIN_MM = int(-BAR_LEN_MM * 0.5)
-SP_MAX_MM = int(BAR_LEN_MM * 0.5)
 # 板载补光（MaixCAM-Pro = B3 照明 LED）
 ENABLE_FILL_LIGHT = True
 
@@ -307,11 +311,9 @@ def wifi_connect(ssid, password):
         return None
     try:
         w = network.wifi.Wifi()
-        try:
-            w.disconnect()
-        except Exception:
-            pass
         print("[ball] wifi connect ssid=%r ..." % ssid)
+        # connect(wait=True) owns the reassociation sequence.  Disconnecting
+        # immediately before it races the WiFi service on some Maix firmware.
         ret = w.connect(ssid, password or "", wait=True, timeout=int(WIFI_CONNECT_TIMEOUT))
         try:
             ok = ret in (0, None) or ret == maix_err.Err.ERR_NONE
@@ -322,15 +324,27 @@ def wifi_connect(ssid, password):
                 ok = bool(w.is_connected())
             except Exception:
                 ok = False
-        try:
-            ip = w.get_ip() or ""
-        except Exception:
-            ip = ""
-        if not _ip_ok(ip):
-            ip = get_ip()
-        if _ip_ok(ip):
-            print("[ball] wifi ok ip=%s" % ip)
-            return ip
+        if not ok:
+            print("[ball] wifi connect fail ret=%r" % ret)
+            return None
+
+        # wait=True normally returns after DHCP succeeds.  Poll briefly for
+        # firmware versions that report success before wlan0 exposes its IP.
+        deadline = time.ticks_ms() + WIFI_IP_READY_TIMEOUT * 1000
+        ip = ""
+        while True:
+            try:
+                ip = w.get_ip() or ""
+            except Exception:
+                ip = ""
+            if not _ip_ok(ip):
+                ip = get_ip()
+            if _ip_ok(ip):
+                print("[ball] wifi ok ip=%s" % ip)
+                return ip
+            if time.ticks_ms() >= deadline:
+                break
+            time.sleep_ms(WIFI_IP_POLL_MS)
         print("[ball] wifi connect fail ret=%r ip=%r" % (ret, ip))
         return None
     except Exception as e:
@@ -718,8 +732,9 @@ def pack_ball_frame(found, pos_mm, cx, cy, conf, mode):
     return _frame_with_csum(body)
 
 
-def pack_setpoint_frame(target_mm):
-    body = struct.pack("<BBh", PROTO_TYPE_SETPOINT, 0x00, _i16(int(round(target_mm)))) + bytes(6)
+def pack_control_frame(action):
+    action_i = max(CONTROL_ACTION_RESET, min(CONTROL_ACTION_PRESET, int(action)))
+    body = struct.pack("<BB", PROTO_TYPE_CONTROL, action_i) + bytes(8)
     return _frame_with_csum(body)
 
 
@@ -734,8 +749,8 @@ def uart_write(ser, data):
         return False
 
 
-def uart_send_sp(ser, sp_mm):
-    return uart_write(ser, pack_setpoint_frame(sp_mm))
+def uart_send_control(ser, action):
+    return uart_write(ser, pack_control_frame(action) * CONTROL_REPEAT)
 
 
 # ===================== 检测 / 跟踪 =====================
@@ -755,12 +770,6 @@ def px_to_mm(cx_roi):
 def mm_to_roi_x(pos_mm, roi=None):
     rx = roi[0] if roi else ROI_X
     return int(round(rx + O_OFFSET_PX + float(pos_mm) * PX_PER_MM))
-
-
-def roi_x_to_mm(x, roi=None):
-    rx = roi[0] if roi else ROI_X
-    mm = (float(x) - rx - O_OFFSET_PX) * MM_PER_PX
-    return int(round(max(SP_MIN_MM, min(SP_MAX_MM, mm))))
 
 
 def _core_darkness(gray, cx, cy):
@@ -1095,38 +1104,25 @@ def layout_controls(img_w, img_h, menu_open=False):
     cached = _LAYOUT_CACHE.get(key)
     if cached is not None:
         return cached
-    by, bh, gap = img_h - 36, 30, 6
-    menu_btn = [6, by, 64, bh]
-    set_btn = [menu_btn[0] + menu_btn[2] + gap, by, 72, bh]
-    reset_btn = [set_btn[0] + set_btn[2] + gap, by, 72, bh]
+    left, right, by, bh, gap = 6, 6, img_h - 36, 30, 4
+    total_width = img_w - left - right - 3 * gap
+    button_width = total_width // 4
+    menu_btn = [left, by, button_width, bh]
+    start_btn = [menu_btn[0] + button_width + gap, by, button_width, bh]
+    preset_btn = [start_btn[0] + button_width + gap, by, button_width, bh]
+    reset_btn = [preset_btn[0] + button_width + gap, by,
+                 img_w - right - (preset_btn[0] + button_width + gap), bh]
     wifi_btn = exit_btn = None
     if menu_open:
         exit_btn = [6, by - (bh + gap), 72, bh]
         wifi_btn = [6, by - 2 * (bh + gap), 72, bh]
     out = {
-        "menu": menu_btn, "set": set_btn, "reset": reset_btn,
+        "menu": menu_btn, "start": start_btn, "preset": preset_btn,
+        "reset": reset_btn,
         "wifi": wifi_btn, "exit": exit_btn, "bar_y": by,
     }
     _LAYOUT_CACHE[key] = out
     return out
-
-
-def layout_drag_strip(roi, bar_y):
-    rx, ry, rw, rh = roi
-    strip_y = min(bar_y - 34, ry + rh + 8)
-    if strip_y < ry + rh + 2:
-        strip_y = ry + rh + 2
-    strip_h = 26
-    if strip_y + strip_h > bar_y - 4:
-        strip_h = max(18, bar_y - 4 - strip_y)
-    return [rx, strip_y, rw, strip_h]
-
-
-def hit_drag_zone(x, y, roi, drag_strip):
-    rx, ry, rw, rh = roi
-    if (rx - 4) <= x <= (rx + rw + 4) and (ry - 10) <= y <= (ry + rh + 10):
-        return True
-    return is_in_button(x, y, drag_strip)
 
 
 def draw_btn(img, btn, label, active=False, danger=False, accent=False):
@@ -1151,35 +1147,26 @@ def draw_btn(img, btn, label, active=False, danger=False, accent=False):
     )
 
 
-def draw_ui(img, roi, det, pos_mm_i, sp_mm, usable,
-            btns, drag_strip, set_mode, dragging, menu_open, fps,
+def draw_ui(img, roi, det, pos_mm_i, usable,
+            btns, control_mode, menu_open, fps,
             stream_on, wifi_ip, clients=0):
     rx, ry, rw, rh = roi
     img.draw_rect(rx, ry, rw, rh, _rgb(UI_ROI), 1)
     ox = rx + O_OFFSET_PX
     img.draw_line(ox, ry - 6, ox, ry + rh + 6, _rgb(UI_O), 1)
 
-    sx = mm_to_roi_x(sp_mm, roi)
-    if set_mode:
-        col_sp = _rgb(UI_SP)
-        img.draw_line(sx, ry - 10, sx, ry + rh + 10, col_sp, 2)
-        img.draw_circle(sx, ry + rh // 2, 5, col_sp, -1)
-        dsx, dsy, dsw, dsh = drag_strip
-        img.draw_rect(dsx, dsy, dsw, dsh, _rgb(UI_BG), -1)
-        img.draw_rect(dsx, dsy, dsw, dsh, col_sp if dragging else _rgb(UI_BORDER), 1)
-        img.draw_rect(max(dsx, sx - 4), dsy, 8, dsh, col_sp, -1)
-        img.draw_string(dsx + 4, dsy + 4, "Drag to set", _rgb(UI_TEXT_DIM), scale=0.9)
-    else:
-        img.draw_line(sx, ry, sx, ry + rh, _rgb(UI_SP_DIM), 1)
-
     if usable and det.get("found"):
         img.draw_circle(int(det["cx"]), int(det["cy"]), 3, _rgb(UI_OK), -1)
 
-    tag = " SET" if set_mode else ""
+    mode_label = {
+        "ready": "Ready",
+        "balance": "Balance",
+        "preset": "Preset",
+    }.get(control_mode, "Ready")
     ball_s = "{:+d}".format(pos_mm_i) if usable else "----"
     img.draw_string(
         6, 4,
-        "Ball {} mm  SP {:+d} mm{}".format(ball_s, sp_mm, tag),
+        "Ball {} mm  {}".format(ball_s, mode_label),
         image.COLOR_WHITE, scale=1.05,
     )
 
@@ -1201,7 +1188,8 @@ def draw_ui(img, roi, det, pos_mm_i, sp_mm, usable,
         draw_btn(img, btns["exit"], "Exit", danger=True)
 
     draw_btn(img, btns["menu"], "Close" if menu_open else "Menu", active=menu_open)
-    draw_btn(img, btns["set"], "Done" if set_mode else "Set", active=set_mode)
+    draw_btn(img, btns["start"], "Start", active=control_mode == "balance")
+    draw_btn(img, btns["preset"], "±5", active=control_mode == "preset")
     draw_btn(img, btns["reset"], "Reset")
 
 
@@ -1234,21 +1222,13 @@ def main():
     pos_mm_i = 0
     has_mm_i = False
     last_tx_ms = 0
-    sp_mm = 0
-    sp_pending = True
-    set_mode = False
-    dragging_sp = False
+    control_mode = "ready"
     menu_open = False
     pressed_last = False
     err_cnt = 0
     last_log_ms = 0
     track = {"has": False, "pos": 0.0, "vel": 0.0, "last_ms": 0, "lost": 0}
     frame_n = 0
-    drag_strip = [0, 0, 0, 0]
-
-    if uart_send_sp(serial_dev, sp_mm):
-        sp_pending = False
-        print("[ball] SP sync 0 mm")
     print("[ball] UI ready stream=%d" % int(_stream_ready))
 
     try:
@@ -1274,8 +1254,6 @@ def main():
                 if serial_dev is not None and (
                     TX_MIN_MS <= 0 or (now_ms - last_tx_ms) >= TX_MIN_MS
                 ):
-                    if sp_pending and uart_send_sp(serial_dev, sp_mm):
-                        sp_pending = False
                     uart_write(
                         serial_dev,
                         pack_ball_frame(
@@ -1289,16 +1267,13 @@ def main():
                     last_tx_ms = now_ms
 
                 tx, ty, pressed = ts.read()
-                need_touch = pressed or pressed_last or dragging_sp
+                need_touch = pressed or pressed_last
                 if need_touch:
                     mx, my = map_touch_to_image(tx, ty, iw, ih, dw, dh)
                     if pressed and not pressed_last:
                         btns = layout_controls(iw, ih, menu_open)
-                        if set_mode:
-                            drag_strip = layout_drag_strip(ROI, btns["bar_y"])
                         if is_in_button(mx, my, btns["menu"]):
                             menu_open = not menu_open
-                            dragging_sp = False
                         elif menu_open and is_in_button(mx, my, btns["exit"]):
                             app.set_exit_flag(True)
                         elif menu_open and is_in_button(mx, my, btns["wifi"]):
@@ -1317,30 +1292,23 @@ def main():
                                     apply_stream_for_ip("")
                             pressed_last = False
                             continue
-                        elif is_in_button(mx, my, btns["set"]):
-                            set_mode = not set_mode
+                        elif is_in_button(mx, my, btns["start"]):
                             menu_open = False
-                            dragging_sp = False
+                            if uart_send_control(serial_dev, CONTROL_ACTION_START):
+                                control_mode = "balance"
+                                print("[ball] control Start")
+                        elif is_in_button(mx, my, btns["preset"]):
+                            menu_open = False
+                            if uart_send_control(serial_dev, CONTROL_ACTION_PRESET):
+                                control_mode = "preset"
+                                print("[ball] control ±5")
                         elif is_in_button(mx, my, btns["reset"]):
-                            sp_mm, sp_pending = 0, True
-                            set_mode = menu_open = dragging_sp = False
-                            if uart_send_sp(serial_dev, 0):
-                                sp_pending = False
+                            menu_open = False
+                            if uart_send_control(serial_dev, CONTROL_ACTION_RESET):
+                                control_mode = "ready"
+                                print("[ball] control Reset")
                         elif menu_open:
                             menu_open = False
-                        elif set_mode and hit_drag_zone(mx, my, ROI, drag_strip):
-                            dragging_sp = True
-                            sp_mm = roi_x_to_mm(mx, ROI)
-                            sp_pending = not uart_send_sp(serial_dev, sp_mm)
-                    elif pressed and set_mode and dragging_sp and not menu_open:
-                        new_sp = roi_x_to_mm(mx, ROI)
-                        if new_sp != sp_mm:
-                            sp_mm = new_sp
-                            sp_pending = not uart_send_sp(serial_dev, sp_mm)
-                    else:
-                        if dragging_sp:
-                            sp_pending = True
-                        dragging_sp = False
                 pressed_last = pressed
 
                 do_disp = (DISP_EVERY_N <= 1) or (frame_n % DISP_EVERY_N == 0)
@@ -1352,11 +1320,9 @@ def main():
                 fps = time.fps()
                 if do_disp or do_stream:
                     btns = layout_controls(iw, ih, menu_open)
-                    if set_mode:
-                        drag_strip = layout_drag_strip(ROI, btns["bar_y"])
                     draw_ui(
-                        img, ROI, det, pos_mm_i, sp_mm, usable,
-                        btns, drag_strip, set_mode, dragging_sp, menu_open,
+                        img, ROI, det, pos_mm_i, usable,
+                        btns, control_mode, menu_open,
                         fps, _stream_ready, _wifi_ip, _mjpeg_clients,
                     )
                 if do_stream:
@@ -1367,8 +1333,8 @@ def main():
                 if now_ms - last_log_ms >= 1000:
                     last_log_ms = now_ms
                     print(
-                        "[ball] pos=%+d sp=%+d fps=%.1f stream=%d cli=%d ip=%s"
-                        % (pos_mm_i, sp_mm, fps, int(_stream_ready),
+                        "[ball] pos=%+d mode=%s fps=%.1f stream=%d cli=%d ip=%s"
+                        % (pos_mm_i, control_mode, fps, int(_stream_ready),
                            _mjpeg_clients, _wifi_ip or "-")
                     )
             except Exception as e:
@@ -1384,6 +1350,7 @@ def main():
                 fill_led.value(0)
             except Exception:
                 pass
+        uart_send_control(serial_dev, CONTROL_ACTION_RESET)
         uart_write(serial_dev, pack_ball_frame(False, 0, 0, 0, 0, mode))
         print("[ball] exit")
 

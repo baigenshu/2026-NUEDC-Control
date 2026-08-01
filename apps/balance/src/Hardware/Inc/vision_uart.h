@@ -21,7 +21,7 @@ typedef struct {
 
 typedef struct {
     bool    valid;
-    bool    start; /* true：校零启动；false：停止并释放电机 */
+    uint8_t action; /* BALL_CONTROL_ACTION_* */
 } ball_control_cmd_t;
 
 void VisionUart_Init(void);
