@@ -2,7 +2,7 @@
  * @file key.h
  * @brief 外接按键（低有效 · 内部上拉 · 软件消抖）
  *
- * KEY_RUN PA17 · KEY_SPD PA18
+ * KEY_RUN PA17 · KEY_SPD PA15（勿用 PA18，BSL 调用脚影响烧录）
  */
 #ifndef KEY_H
 #define KEY_H

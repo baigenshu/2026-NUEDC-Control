@@ -1,22 +1,26 @@
 /**
  * @file main.c
- * @brief 四路电机开环 + 编码器 + OLED + 双按键
+ * @brief 四路红外巡线 · 四轮独立速度 PID 闭环
  *
- * KEY_RUN PA17：电机开/关（低有效）
- * KEY_SPD PA18：档位 0→1000→2000→3000→0（低有效）
- * DEBUG UART0 PA10/PA11 115200：1 s 心跳
+ * KEY_RUN PA17：巡线开/关
+ * KEY_SPD PA15：模式 STOP→M1→M2→M3→M4→STOP
+ *               M1=三档持续 / M2=三档17s停 / M3=二档8s缓启停 / M4=一档30s缓启停 / STOP=不动
+ * IR p1..p4 = PB19/PB17/PA16/PA14（G1–G4）
  *
  * OLED：
- *   L1  PWM:+xxxx
- *   L2  A:+xxx B:+xxx
- *   L3  C:+xxx D:+xxx
- *   L4  ON  G2 / OFF G0
+ *   L1  SPD:+xxxx
+ *   L2  IR:xxxx E:±xx
+ *   L3  A:+xxx B:+xxx
+ *   L4  TRK / OFF Mx  T:xxx.xx   (RUN 键计时)
  */
 #include "ti_msp_dl_config.h"
 #include "motor.h"
 #include "motor_cfg.h"
 #include "encoder.h"
 #include "key.h"
+#include "ir4.h"
+#include "line_follow.h"
+#include "line_follow_cfg.h"
 #include "OLED.h"
 #include "uart_debug.h"
 #include <stdbool.h>
@@ -26,7 +30,7 @@
 #endif
 
 #ifndef SAMPLE_MS
-#define SAMPLE_MS 20u
+#define SAMPLE_MS 10u
 #endif
 
 #ifndef OLED_REFRESH_MS
@@ -37,8 +41,24 @@
 #define HB_PERIOD_MS 1000u
 #endif
 
-static const int16_t s_gears[PWM_GEAR_COUNT] = {
-    PWM_GEAR_0, PWM_GEAR_1, PWM_GEAR_2, PWM_GEAR_3,
+/* 运行模式：STOP + 四种循迹模式（KEY_SPD 循环）。timeout_ms=0 不自动停。
+ * ramp_up_ms/ramp_down_ms 非零 → 梯形速度曲线（缓启缓停），自动适应 timeout。*/
+typedef struct {
+    int16_t  spd;          /* 基速 pulses/10ms */
+    uint32_t timeout_ms;   /* 0 = 不自动停 */
+    uint32_t ramp_up_ms;   /* 加速斜坡时长，0 = 瞬时启动 */
+    uint32_t ramp_down_ms; /* 减速斜坡时长，0 = 瞬时停止 */
+} run_mode_t;
+
+#define MODE_COUNT  (5)
+#define MODE_STOP   (0)
+
+static const run_mode_t s_modes[MODE_COUNT] = {
+    { SPD_GEAR_0, 0u,     0u,    0u    },  /* M0 STOP: 不动                  */
+    { SPD_GEAR_3, 0u,     0u,    0u    },  /* M1: 三档, 持续                  */
+    { SPD_GEAR_3, 17000u, 0u,    0u    },  /* M2: 三档, 17s 自动停            */
+    { SPD_GEAR_2, 7000u,  2000u, 2000u },  /* M3: 二档, 8s, 2s斜坡缓启停      */
+    { SPD_GEAR_1, 30000u, 5000u, 5000u },  /* M4: 一档, 30s, 5s斜坡缓启停     */
 };
 
 static uint32_t s_ms;
@@ -46,9 +66,16 @@ static uint32_t s_last_systick;
 static uint32_t s_cycle_accum;
 
 static int32_t s_ea, s_eb, s_ec, s_ed;
-static int16_t s_pwm;
-static uint8_t s_gear_idx;
-static bool s_motor_on;
+static int16_t s_spd;        /* 当前模式目标基速（pulses/10ms）*/
+static int16_t s_cur_spd;    /* 当前实际下发给循迹的基速（M3 斜坡时随时间变化）*/
+static uint8_t s_mode_idx;
+static uint8_t s_ui_dirty;
+
+/* RUN 键计时器：按下启动计时 / 再按停止并显示 / 再启动清零重计 */
+static uint8_t  s_timer_running;     /* 0=停止(显示冻结用时), 1=计时中 */
+static uint32_t s_timer_start_ms;    /* 启动时刻 (ms) */
+static uint32_t s_timer_elapsed_ms;  /* 停止时冻结的用时 (ms) */
+static uint32_t s_timer_display_ms;  /* 当前显示用 (ms) */
 
 static void timebase_init(void)
 {
@@ -76,30 +103,84 @@ static uint32_t millis(void)
     return s_ms;
 }
 
-static void apply_motor_output(void)
+/*
+ * 通用梯形斜坡基速：按启动后经过时间生成
+ *   0 .. ramp_up           线性加速 0 → spd
+ *   ramp_up .. timeout-dn  巡航 spd
+ *   timeout-dn .. timeout  线性减速 spd → 0
+ *   ≥ timeout               0（由 timeout 触发 stop_run 收尾，基速已为 0，无急停）
+ * 仅对 ramp_up_ms != 0 的模式调用。
+ */
+static int16_t ramp_speed(uint32_t elapsed, uint8_t idx)
 {
-    if (s_motor_on) {
-        Motor_SetEnable(true);
-        Motor_SetAll((int16_t)(s_pwm * POL_A), (int16_t)(s_pwm * POL_B),
-                     (int16_t)(s_pwm * POL_C), (int16_t)(s_pwm * POL_D));
+    const run_mode_t *m = &s_modes[idx];
+    float    tgt = (float)m->spd;
+    uint32_t up  = m->ramp_up_ms;
+    uint32_t dn  = m->ramp_down_ms;
+    uint32_t total     = m->timeout_ms;
+    uint32_t cruise_end = total - dn;   /* 巡航区结束 = 减速区开始 */
+    float    v;
+
+    if (elapsed >= total) {
+        v = 0.f;
+    } else if (elapsed >= cruise_end) {
+        v = tgt * (1.f - (float)(elapsed - cruise_end) / (float)dn);
+    } else if (elapsed >= up) {
+        v = tgt;
     } else {
-        Motor_StopAll(MOTOR_STOP_COAST);
-        Motor_SetEnable(false);
+        v = tgt * (float)elapsed / (float)up;
     }
+    if (v < 0.f) v = 0.f;
+    if (v > tgt) v = tgt;
+    return (int16_t)v;
 }
 
-static void on_key_run(void)
+static void start_run(uint32_t now)
 {
-    s_motor_on = !s_motor_on;
-    apply_motor_output();
+    /* 带斜坡的模式从 0 起步由斜坡推上去；其余直接给目标基速 */
+    s_cur_spd = (s_modes[s_mode_idx].ramp_up_ms != 0u) ? 0 : s_spd;
+    LineFollow_SetBaseSpd(s_cur_spd);
+    LineFollow_SetEnable(true);
+    /* 启动：清零并开始计时 */
+    s_timer_running    = 1u;
+    s_timer_start_ms   = now;
+    s_timer_elapsed_ms = 0u;
+}
+
+static void stop_run(uint32_t now)
+{
+    /* 停止：冻结用时并打印 */
+    LineFollow_SetEnable(false);
+    s_timer_running    = 0u;
+    s_timer_elapsed_ms = now - s_timer_start_ms;
+    s_cur_spd = 0;
+    UartDebug_Printf("LAP %lu.%02lu s\n",
+                     (unsigned long)(s_timer_elapsed_ms / 1000u),
+                     (unsigned long)((s_timer_elapsed_ms % 1000u) / 10u));
+}
+
+static void on_key_run(uint32_t now)
+{
+    if (!LineFollow_IsEnabled()) {
+        start_run(now);
+        UartDebug_Printf("KEY_RUN -> ON mode=%u spd=%d\n",
+                         (unsigned)s_mode_idx, (int)s_spd);
+    } else {
+        stop_run(now);
+        UartDebug_Printf("KEY_RUN -> OFF (manual)\n");
+    }
+    s_ui_dirty = 1u;
 }
 
 static void on_key_spd(void)
 {
-    s_gear_idx = (uint8_t)((s_gear_idx + 1u) % PWM_GEAR_COUNT);
-    s_pwm = s_gears[s_gear_idx];
-    if (s_motor_on)
-        apply_motor_output();
+    s_mode_idx = (uint8_t)((s_mode_idx + 1u) % MODE_COUNT);
+    s_spd = s_modes[s_mode_idx].spd;
+    LineFollow_SetBaseSpd(s_spd);
+    UartDebug_Printf("KEY_SPD -> mode=%u spd=%d timeout=%lu ms\n",
+                     (unsigned)s_mode_idx, (int)s_spd,
+                     (unsigned long)s_modes[s_mode_idx].timeout_ms);
+    s_ui_dirty = 1u;
 }
 
 static int32_t clamp_show(int32_t v, int32_t lim)
@@ -114,38 +195,67 @@ static int32_t clamp_show(int32_t v, int32_t lim)
 static void ui_draw_static(void)
 {
     OLED_Clear();
-    OLED_ShowString(1, 1, "PWM:");
-    OLED_ShowString(2, 1, "A:");
-    OLED_ShowString(2, 9, "B:");
-    OLED_ShowString(3, 1, "C:");
-    OLED_ShowString(3, 9, "D:");
+    OLED_ShowString(1, 1, "SPD:");
+    OLED_ShowString(2, 1, "IR:");
+    OLED_ShowString(2, 9, "E:");
+    OLED_ShowString(3, 1, "A:");
+    OLED_ShowString(3, 9, "B:");
+}
+
+static const char *state_text(lf_state_t st)
+{
+    return (st == LF_STATE_TRACK) ? "TRK M" : "OFF M";
 }
 
 static void ui_refresh(void)
 {
-    int32_t a = clamp_show(s_ea, 999);
-    int32_t b = clamp_show(s_eb, 999);
-    int32_t c = clamp_show(s_ec, 999);
-    int32_t d = clamp_show(s_ed, 999);
-    int32_t pwm = (int32_t)s_pwm;
+    uint8_t  mask = LineFollow_GetMask();
+    float    err_f = LineFollow_GetError();
+    int32_t  err;
+    int32_t  a = clamp_show(s_ea, 999);
+    int32_t  b = clamp_show(s_eb, 999);
+    int32_t  c = clamp_show(s_ec, 999);
+    int32_t  d = clamp_show(s_ed, 999);
+    int32_t  spd = (int32_t)s_cur_spd;
+    char     bits[5];
+    uint8_t  i;
 
-    if (pwm > 9999)
-        pwm = 9999;
-    if (pwm < -9999)
-        pwm = -9999;
+    if (spd > 9999)  spd = 9999;
+    if (spd < -9999) spd = -9999;
 
-    OLED_ShowSignedNum(1, 5, pwm, 4);
+    if (err_f <= -90.f || err_f >= 90.f)
+        err = (int32_t)err_f;
+    else
+        err = (int32_t)(err_f * 10.f);
+    err = clamp_show(err, 99);
+
+    OLED_ShowSignedNum(1, 5, spd, 4);
 
     OLED_ShowSignedNum(2, 3, a, 3);
     OLED_ShowSignedNum(2, 11, b, 3);
     OLED_ShowSignedNum(3, 3, c, 3);
     OLED_ShowSignedNum(3, 11, d, 3);
 
-    if (s_motor_on)
-        OLED_ShowString(4, 1, "ON  G");
-    else
-        OLED_ShowString(4, 1, "OFF G");
-    OLED_ShowNum(4, 7, (uint32_t)s_gear_idx, 1);
+    for (i = 0; i < 4u; ++i)
+        bits[i] = (mask & (1u << i)) ? '1' : '0';
+    bits[4] = '\0';
+    OLED_ShowString(2, 4, bits);
+    OLED_ShowSignedNum(2, 11, err, 2);
+
+    OLED_ShowString(4, 1, state_text(LineFollow_GetState()));
+    OLED_ShowNum(4, 7, (uint32_t)s_mode_idx, 1);
+
+    /* L4 末尾：计时 T:xxx.xx (s) */
+    {
+        uint32_t sec = s_timer_display_ms / 1000u;
+        uint32_t cs  = (s_timer_display_ms % 1000u) / 10u;
+        if (sec > 999u) sec = 999u;          /* 限幅 999.99 s */
+        OLED_ShowChar(4, 9,  'T');
+        OLED_ShowChar(4, 10, ':');
+        OLED_ShowNum (4, 11, sec, 3);
+        OLED_ShowChar(4, 14, '.');
+        OLED_ShowNum (4, 15, cs, 2);
+    }
 }
 
 int main(void)
@@ -154,12 +264,12 @@ int main(void)
     uint32_t t_oled;
     uint32_t t_hb;
     uint32_t now;
-    uint32_t dt;
     uint32_t hb_cnt;
 
-    s_gear_idx = 0;
-    s_pwm = s_gears[s_gear_idx];
-    s_motor_on = false;
+    s_mode_idx = MODE_STOP;
+    s_spd = s_modes[s_mode_idx].spd;
+    s_cur_spd = 0;
+    s_ui_dirty = 0;
     hb_cnt = 0;
 
     SYSCFG_DL_init();
@@ -170,37 +280,55 @@ int main(void)
     Motor_Init();
     Encoder_Init();
     Key_Init();
-    apply_motor_output();
+    LineFollow_Init();
+    LineFollow_SetBaseSpd(s_spd);
 
-    UartDebug_Puts("line_track boot\n");
-    UartDebug_Printf("UART0 %u 8N1 TX=PA10\n", (unsigned)DEBUG_UART_BAUD_RATE);
+    UartDebug_Puts("line_track SPD-CTRL boot\n");
+    UartDebug_Printf("RUN=PA17 SPD=PA15 init_spd=%d\n", (int)s_spd);
 
     ui_draw_static();
     ui_refresh();
 
     t_prev = millis();
     t_oled = t_prev;
-    t_hb = t_prev;
+    t_hb   = t_prev;
 
     for (;;) {
         now = millis();
-        dt = now - t_prev;
-        if (dt < SAMPLE_MS)
-            continue;
-        t_prev = now;
 
         if (Key_PollPress(KEY_ID_RUN, now))
-            on_key_run();
+            on_key_run(now);
         if (Key_PollPress(KEY_ID_SPD, now))
             on_key_spd();
 
-        if (s_motor_on)
-            apply_motor_output();
+        /* 模式超时自动停（M2=17s, M3=8s, M4=30s；M0/M1 timeout=0 不触发）*/
+        if (s_timer_running &&
+            s_modes[s_mode_idx].timeout_ms != 0u &&
+            (now - s_timer_start_ms) >= s_modes[s_mode_idx].timeout_ms) {
+            stop_run(now);
+            UartDebug_Printf("AUTO-STOP mode=%u\n", (unsigned)s_mode_idx);
+            s_ui_dirty = 1u;
+        }
 
-        Encoder_ReadDeltaAll(&s_ea, &s_eb, &s_ec, &s_ed);
+        if ((now - t_prev) >= SAMPLE_MS) {
+            t_prev = now;
+            /* 运行中按模式刷新基速：带斜坡的模式走梯形曲线，其余恒定 */
+            if (s_timer_running) {
+                if (s_modes[s_mode_idx].ramp_up_ms != 0u)
+                    s_cur_spd = ramp_speed(now - s_timer_start_ms, s_mode_idx);
+                else
+                    s_cur_spd = s_spd;
+                LineFollow_SetBaseSpd(s_cur_spd);
+            }
+            LineFollow_Update();
+            LineFollow_GetEncoderDeltas(&s_ea, &s_eb, &s_ec, &s_ed);
+        }
 
-        if ((now - t_oled) >= OLED_REFRESH_MS) {
+        if (s_ui_dirty || (now - t_oled) >= OLED_REFRESH_MS) {
             t_oled = now;
+            s_ui_dirty = 0;
+            s_timer_display_ms = s_timer_running
+                ? (now - s_timer_start_ms) : s_timer_elapsed_ms;
             ui_refresh();
         }
 
@@ -208,9 +336,13 @@ int main(void)
             t_hb = now;
             hb_cnt++;
             UartDebug_Printf(
-                "HB #%lu t=%lums on=%d g=%u pwm=%d enc=%ld,%ld,%ld,%ld\n",
-                (unsigned long)hb_cnt, (unsigned long)now,
-                s_motor_on ? 1 : 0, (unsigned)s_gear_idx, (int)s_pwm,
+                "HB #%lu en=%d mode=%u spd=%d m=%02X e=%ld st=%d "
+                "enc=%ld,%ld,%ld,%ld\n",
+                (unsigned long)hb_cnt,
+                LineFollow_IsEnabled() ? 1 : 0, (unsigned)s_mode_idx,
+                (int)s_cur_spd, (unsigned)LineFollow_GetMask(),
+                (long)(LineFollow_GetError() * 10.0f),  /* e×10，单位0.1 */
+                (int)LineFollow_GetState(),
                 (long)s_ea, (long)s_eb, (long)s_ec, (long)s_ed);
         }
     }

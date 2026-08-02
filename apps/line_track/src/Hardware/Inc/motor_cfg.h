@@ -30,8 +30,8 @@
 #define ENCODER_PPR                    (MG310_HALL_CPR * 4 * MG310_GEAR_RATIO)
 
 /* 车体前进时脉冲应增加 */
-#define ENC_SIGN_A                     (+1)
-#define ENC_SIGN_B                     (+1)
+#define ENC_SIGN_A                     (-1)   /* 左轮编码器与右轮镜像，翻转 */
+#define ENC_SIGN_B                     (-1)   /* 左轮编码器与右轮镜像，翻转 */
 #define ENC_SIGN_C                     (+1)
 #define ENC_SIGN_D                     (+1)
 
